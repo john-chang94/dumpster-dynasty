@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { BuildingSketch } from '@/components/game/skia-placeholders';
-import { ActionButton, Card, CostRow, GameScreen, gameColors, MessageBanner, ProgressBar, SectionTitle } from '@/components/game/ui';
+import { BuildingArt } from '@/components/game/art';
+import { ActionButton, Card, CostRow, GameScreen, gameColors, MessageBanner, ProgressBar } from '@/components/game/ui';
 import { BUILDINGS, BuildingId, getBuildingStage, getBuildingUpgradeCost, hasResources } from '@/constants/game';
 import { useGame } from '@/state/game-store';
 
@@ -9,51 +9,53 @@ export default function BuildScreen() {
   const { state, upgradeBuilding } = useGame();
 
   return (
-    <GameScreen title="Build & Upgrade" subtitle="Linear building upgrades tune the idle economy for the first prototype.">
-      <MessageBanner />
-
-      <Card style={styles.introCard}>
-        <SectionTitle title="Base Bonuses" />
-        <Text style={styles.bodyText}>
-          These five buildings match the MVP roadmap. Each level improves the claim loop immediately; the three visual stages are
-          placeholder sketches until production art arrives.
-        </Text>
-      </Card>
+    <GameScreen title="Build & Upgrade" subtitle="Upgrade structures to increase crew capacity, storage, and run output.">
+      <MessageBanner scope="build" />
 
       {(Object.keys(BUILDINGS) as BuildingId[]).map((buildingId) => {
         const building = BUILDINGS[buildingId];
         const level = state.buildings[buildingId].level;
+        const stage = getBuildingStage(level);
         const cost = getBuildingUpgradeCost(buildingId, level);
         const canUpgrade = Boolean(cost && hasResources(state.resources, cost));
         const progress = level / building.maxLevel;
 
         return (
           <Card key={buildingId} style={styles.buildingCard}>
-            <View style={styles.buildingTop}>
-              <BuildingSketch buildingId={buildingId} level={level} size={86} />
+            <View style={styles.buildingRow}>
+              <View style={styles.artFrame}>
+                <BuildingArt buildingId={buildingId} level={level} size={106} />
+              </View>
               <View style={styles.buildingCopy}>
                 <View style={styles.titleRow}>
-                  <Text style={styles.buildingName}>{building.name}</Text>
-                  <Text style={styles.levelBadge}>Lv {level}</Text>
+                  <View style={styles.titleCopy}>
+                    <Text adjustsFontSizeToFit minimumFontScale={0.78} numberOfLines={1} style={styles.buildingName}>
+                      {building.name}
+                    </Text>
+                    <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={2} style={styles.effectText}>
+                      {building.effect}
+                    </Text>
+                  </View>
+                  <View style={styles.badgeStack}>
+                    <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={styles.levelBadge}>Lv {level}</Text>
+                    <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={styles.stageBadge}>Stage {stage}</Text>
+                  </View>
                 </View>
-                <Text style={styles.effectText}>{building.effect}</Text>
-                <Text style={styles.stageText}>Stage {getBuildingStage(level)} - {building.stageName}</Text>
                 <ProgressBar value={progress} />
+                <View style={styles.upgradeRow}>
+                  <View style={styles.costBlock}>
+                    <Text adjustsFontSizeToFit minimumFontScale={0.78} numberOfLines={1} style={styles.costLabel}>Cost</Text>
+                    <CostRow cost={cost} resources={state.resources} />
+                  </View>
+                  <ActionButton
+                    disabled={!canUpgrade}
+                    icon={cost ? 'arrow-up-bold' : 'check-bold'}
+                    onPress={() => upgradeBuilding(buildingId)}
+                    style={styles.upgradeButton}>
+                    {cost ? 'Upgrade' : 'Maxed'}
+                  </ActionButton>
+                </View>
               </View>
-            </View>
-
-            <View style={styles.upgradeRow}>
-              <View style={styles.costBlock}>
-                <Text style={styles.costLabel}>Upgrade cost</Text>
-                <CostRow cost={cost} resources={state.resources} />
-              </View>
-              <ActionButton
-                disabled={!canUpgrade}
-                icon={cost ? 'arrow-up-bold' : 'check-bold'}
-                onPress={() => upgradeBuilding(buildingId)}
-                style={styles.upgradeButton}>
-                {cost ? 'Upgrade' : 'Maxed'}
-              </ActionButton>
             </View>
           </Card>
         );
@@ -63,37 +65,53 @@ export default function BuildScreen() {
 }
 
 const styles = StyleSheet.create({
-  introCard: {
+  buildingCard: {
+    padding: 10,
+  },
+  buildingRow: {
+    alignItems: 'stretch',
+    flexDirection: 'row',
     gap: 10,
   },
-  bodyText: {
-    color: gameColors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 19,
-  },
-  buildingCard: {
-    gap: 12,
-  },
-  buildingTop: {
+  artFrame: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
+    backgroundColor: '#FFF7E8',
+    borderColor: 'rgba(84, 52, 25, 0.18)',
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 106,
+    justifyContent: 'center',
+    width: 106,
   },
   buildingCopy: {
     flex: 1,
-    gap: 6,
+    gap: 8,
+    minWidth: 0,
   },
   titleRow: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 8,
   },
+  titleCopy: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
   buildingName: {
     color: gameColors.ink,
-    flex: 1,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
+  },
+  effectText: {
+    color: gameColors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 14,
+  },
+  badgeStack: {
+    alignItems: 'flex-end',
+    gap: 5,
   },
   levelBadge: {
     backgroundColor: '#F8E0AC',
@@ -101,22 +119,18 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     borderWidth: 1,
     color: gameColors.ink,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
     overflow: 'hidden',
-    paddingHorizontal: 7,
+    minWidth: 50,
+    paddingHorizontal: 6,
     paddingVertical: 3,
+    textAlign: 'center',
   },
-  effectText: {
-    color: gameColors.ink,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  stageText: {
-    color: gameColors.muted,
-    fontSize: 12,
-    fontWeight: '700',
+  stageBadge: {
+    color: gameColors.greenDark,
+    fontSize: 10,
+    fontWeight: '900',
   },
   upgradeRow: {
     alignItems: 'center',
@@ -125,20 +139,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    padding: 10,
+    gap: 7,
+    padding: 7,
   },
   costBlock: {
     flex: 1,
-    gap: 6,
+    gap: 4,
+    minWidth: 0,
   },
   costLabel: {
     color: gameColors.muted,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   upgradeButton: {
-    minWidth: 104,
+    minHeight: 36,
+    minWidth: 92,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
   },
 });

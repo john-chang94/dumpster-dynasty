@@ -1,0 +1,81 @@
+{
+  "frames": {
+    "sprite10": {
+      "frame": { "x": 651, "y": 0, "w": 225, "h": 241 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 225, "h": 241 },
+      "sourceSize": { "w": 225, "h": 241 }
+    },
+    "sprite11": {
+      "frame": { "x": 0, "y": 1, "w": 202, "h": 212 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 202, "h": 212 },
+      "sourceSize": { "w": 202, "h": 212 }
+    },
+    "sprite12": {
+      "frame": { "x": 208, "y": 1, "w": 221, "h": 264 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 221, "h": 264 },
+      "sourceSize": { "w": 221, "h": 264 }
+    },
+    "sprite13": {
+      "frame": { "x": 434, "y": 1, "w": 211, "h": 266 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 211, "h": 266 },
+      "sourceSize": { "w": 211, "h": 266 }
+    },
+    "sprite20": {
+      "frame": { "x": 0, "y": 219, "w": 203, "h": 216 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 203, "h": 216 },
+      "sourceSize": { "w": 203, "h": 216 }
+    },
+    "sprite21": {
+      "frame": { "x": 650, "y": 246, "w": 199, "h": 209 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 199, "h": 209 },
+      "sourceSize": { "w": 199, "h": 209 }
+    },
+    "sprite23": {
+      "frame": { "x": 459, "y": 439, "w": 185, "h": 269 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 185, "h": 269 },
+      "sourceSize": { "w": 185, "h": 269 }
+    },
+    "sprite24": {
+      "frame": { "x": 0, "y": 440, "w": 207, "h": 280 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 207, "h": 280 },
+      "sourceSize": { "w": 207, "h": 280 }
+    },
+    "sprite25": {
+      "frame": { "x": 212, "y": 440, "w": 241, "h": 274 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 241, "h": 274 },
+      "sourceSize": { "w": 241, "h": 274 }
+    },
+    "sprite26": {
+      "frame": { "x": 651, "y": 461, "w": 219, "h": 248 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 219, "h": 248 },
+      "sourceSize": { "w": 219, "h": 248 }
+    }
+  },
+  "meta": {
+    "app": "https://www.leshylabs.com/apps/sstool/",
+    "version": "Leshy SpriteSheet Tool v0.9.1",
+    "image": "loot_rare_atlas.png",
+    "size": { "w": 876, "h": 721 },
+    "scale": 1
+  }
+}

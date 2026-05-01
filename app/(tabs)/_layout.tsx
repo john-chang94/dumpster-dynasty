@@ -1,15 +1,21 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { Image } from 'expo-image';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
+import { navigationIconSources, TabKey } from '@/components/game/asset-sources';
 import { HapticTab } from '@/components/haptic-tab';
 import { gameColors } from '@/components/game/ui';
 
-type TabIconName = keyof typeof MaterialCommunityIcons.glyphMap;
-
-function tabIcon(name: TabIconName) {
-  return function TabIcon({ color, size }: { color: string; size: number }) {
-    return <MaterialCommunityIcons name={name} color={color} size={size} />;
+function tabIcon(tabKey: TabKey) {
+  return function TabIcon({ focused, size }: { focused: boolean; color: string; size: number }) {
+    return (
+      <Image
+        accessibilityIgnoresInvertColors
+        contentFit="contain"
+        source={navigationIconSources[tabKey][focused ? 'active' : 'inactive']}
+        style={{ height: size + 5, width: size + 5 }}
+      />
+    );
   };
 }
 
@@ -37,35 +43,35 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Base',
-          tabBarIcon: tabIcon('home-variant'),
+          tabBarIcon: tabIcon('base'),
         }}
       />
       <Tabs.Screen
         name="scavenge"
         options={{
           title: 'Scavenge',
-          tabBarIcon: tabIcon('magnify'),
+          tabBarIcon: tabIcon('scavenge'),
         }}
       />
       <Tabs.Screen
         name="build"
         options={{
           title: 'Build',
-          tabBarIcon: tabIcon('hammer-wrench'),
+          tabBarIcon: tabIcon('build'),
         }}
       />
       <Tabs.Screen
         name="collection"
         options={{
           title: 'Collection',
-          tabBarIcon: tabIcon('book-open-variant'),
+          tabBarIcon: tabIcon('collection'),
         }}
       />
       <Tabs.Screen
         name="shop"
         options={{
           title: 'Shop',
-          tabBarIcon: tabIcon('cart'),
+          tabBarIcon: tabIcon('shop'),
         }}
       />
     </Tabs>

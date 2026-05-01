@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useReducer, useState } from 'react';
+import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useReducer, useState } from 'react';
 import { AppState } from 'react-native';
 
 import {
@@ -27,6 +27,7 @@ const OFFLINE_CAP_HOURS = 8;
 
 export type BuildingState = Record<BuildingId, { level: number }>;
 export type RaccoonState = Record<RaccoonId, { unlocked: boolean; level: number }>;
+export type MessageScope = 'base' | 'build' | 'collection' | 'scavenge' | 'shop';
 
 export type ScavengeRun = {
   id: string;
@@ -47,6 +48,7 @@ export type GameState = {
   lastSeenAt: number;
   totalRunsClaimed: number;
   lastMessage?: string;
+  lastMessageScope?: MessageScope;
 };
 
 type GameAction =
@@ -54,7 +56,7 @@ type GameAction =
   | { type: 'claimOffline'; now: number }
   | { type: 'tapLootPile'; now: number }
   | { type: 'startRun'; zoneId: ZoneId; raccoonId: RaccoonId; now: number }
-  | { type: 'claimRun'; runId: string; now: number }
+  | { type: 'claimRun'; runId: string; now: number; scope?: MessageScope }
   | { type: 'upgradeBuilding'; buildingId: BuildingId; now: number }
   | { type: 'unlockZone'; zoneId: ZoneId; now: number }
   | { type: 'recruitRaccoon'; raccoonId: RaccoonId; now: number }
@@ -66,7 +68,7 @@ type GameContextValue = {
   claimOfflineRewards: () => void;
   tapLootPile: () => void;
   startRun: (zoneId: ZoneId, raccoonId: RaccoonId) => void;
-  claimRun: (runId: string) => void;
+  claimRun: (runId: string, scope?: MessageScope) => void;
   upgradeBuilding: (buildingId: BuildingId) => void;
   unlockZone: (zoneId: ZoneId) => void;
   recruitRaccoon: (raccoonId: RaccoonId) => void;
@@ -97,6 +99,7 @@ export function GameProvider({ children }: PropsWithChildren) {
             state: {
               ...createInitialState(),
               lastMessage: 'Started a fresh local save.',
+              lastMessageScope: 'base',
             },
           });
         }
@@ -140,7 +143,7 @@ export function GameProvider({ children }: PropsWithChildren) {
       tapLootPile: () => dispatch({ type: 'tapLootPile', now: Date.now() }),
       startRun: (zoneId, raccoonId) =>
         dispatch({ type: 'startRun', zoneId, raccoonId, now: Date.now() }),
-      claimRun: (runId) => dispatch({ type: 'claimRun', runId, now: Date.now() }),
+      claimRun: (runId, scope) => dispatch({ type: 'claimRun', runId, now: Date.now(), scope }),
       upgradeBuilding: (buildingId) =>
         dispatch({ type: 'upgradeBuilding', buildingId, now: Date.now() }),
       unlockZone: (zoneId) => dispatch({ type: 'unlockZone', zoneId, now: Date.now() }),
@@ -199,6 +202,7 @@ export function createInitialState(now = Date.now()): GameState {
     lastSeenAt: now,
     totalRunsClaimed: 0,
     lastMessage: 'Tap the loot pile, send Scout out, then upgrade the base.',
+    lastMessageScope: 'base',
   };
 }
 
@@ -241,6 +245,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         return {
           ...state,
           lastMessage: 'No offline stash waiting yet.',
+          lastMessageScope: 'base',
         };
       }
 
@@ -250,6 +255,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         pendingOfflineRewards: createResourceBundle(),
         lastSeenAt: action.now,
         lastMessage: 'Offline stash claimed.',
+        lastMessageScope: 'base',
       };
     case 'tapLootPile': {
       const shinies = Math.random() < 0.16 ? 1 : 0;
@@ -260,6 +266,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         discoveredLoot: maybeDiscoverLoot(state.discoveredLoot, ['pizza_crust', 'soda_can'], 0.35),
         lastSeenAt: action.now,
         lastMessage: shinies > 0 ? 'Loot pile had a shiny tucked under it.' : 'Loot pile sorted.',
+        lastMessageScope: 'base',
       };
     }
     case 'startRun': {
@@ -267,19 +274,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const raccoon = RACCOONS[action.raccoonId];
 
       if (!state.unlockedZones.includes(zone.id)) {
-        return { ...state, lastMessage: `${zone.name} is still locked.` };
+        return { ...state, lastMessage: `${zone.name} is still locked.`, lastMessageScope: 'scavenge' };
       }
 
       if (!state.raccoons[raccoon.id]?.unlocked) {
-        return { ...state, lastMessage: `${raccoon.name} is not recruited yet.` };
+        return { ...state, lastMessage: `${raccoon.name} is not recruited yet.`, lastMessageScope: 'scavenge' };
       }
 
       if (state.runs.some((run) => run.raccoonId === raccoon.id)) {
-        return { ...state, lastMessage: `${raccoon.name} is already out scavenging.` };
+        return { ...state, lastMessage: `${raccoon.name} is already out scavenging.`, lastMessageScope: 'scavenge' };
       }
 
       if (state.runs.some((run) => run.zoneId === zone.id)) {
-        return { ...state, lastMessage: `${zone.name} already has a run in progress.` };
+        return { ...state, lastMessage: `${zone.name} already has a run in progress.`, lastMessageScope: 'scavenge' };
       }
 
       return {
@@ -296,17 +303,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ],
         lastSeenAt: action.now,
         lastMessage: `${raccoon.name} headed for ${zone.name}.`,
+        lastMessageScope: 'scavenge',
       };
     }
     case 'claimRun': {
       const run = state.runs.find((candidate) => candidate.id === action.runId);
 
       if (!run) {
-        return { ...state, lastMessage: 'That run is no longer active.' };
+        return { ...state, lastMessage: 'That run is no longer active.', lastMessageScope: action.scope ?? 'scavenge' };
       }
 
       if (!isRunReady(run, action.now)) {
-        return { ...state, lastMessage: 'That crew is still scavenging.' };
+        return { ...state, lastMessage: 'That crew is still scavenging.', lastMessageScope: action.scope ?? 'scavenge' };
       }
 
       const reward = rollRunReward(state, run);
@@ -323,6 +331,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         totalRunsClaimed: state.totalRunsClaimed + 1,
         lastSeenAt: action.now,
         lastMessage: lootName ? `Run claimed. New find: ${lootName}.` : 'Run claimed.',
+        lastMessageScope: action.scope ?? 'scavenge',
       };
     }
     case 'upgradeBuilding': {
@@ -331,11 +340,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const cost = getBuildingUpgradeCost(action.buildingId, level);
 
       if (!cost) {
-        return { ...state, lastMessage: `${building.name} is already maxed for this prototype.` };
+        return { ...state, lastMessage: `${building.name} is already maxed for this prototype.`, lastMessageScope: 'build' };
       }
 
       if (!hasResources(state.resources, cost)) {
-        return { ...state, lastMessage: `Need more resources for ${building.name}.` };
+        return { ...state, lastMessage: `Need more resources for ${building.name}.`, lastMessageScope: 'build' };
       }
 
       return {
@@ -347,17 +356,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
         lastSeenAt: action.now,
         lastMessage: `${building.name} upgraded to Level ${level + 1}.`,
+        lastMessageScope: 'build',
       };
     }
     case 'unlockZone': {
       const zone = ZONES[action.zoneId];
 
       if (state.unlockedZones.includes(action.zoneId)) {
-        return { ...state, lastMessage: `${zone.name} is already open.` };
+        return { ...state, lastMessage: `${zone.name} is already open.`, lastMessageScope: 'scavenge' };
       }
 
       if (!zone.unlockCost || !hasResources(state.resources, zone.unlockCost)) {
-        return { ...state, lastMessage: `Need more resources to unlock ${zone.name}.` };
+        return { ...state, lastMessage: `Need more resources to unlock ${zone.name}.`, lastMessageScope: 'scavenge' };
       }
 
       return {
@@ -366,17 +376,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         unlockedZones: [...state.unlockedZones, action.zoneId],
         lastSeenAt: action.now,
         lastMessage: `${zone.name} unlocked.`,
+        lastMessageScope: 'scavenge',
       };
     }
     case 'recruitRaccoon': {
       const raccoon = RACCOONS[action.raccoonId];
 
       if (state.raccoons[action.raccoonId].unlocked) {
-        return { ...state, lastMessage: `${raccoon.name} is already in the crew.` };
+        return { ...state, lastMessage: `${raccoon.name} is already in the crew.`, lastMessageScope: 'collection' };
       }
 
       if (!hasResources(state.resources, raccoon.recruitCost)) {
-        return { ...state, lastMessage: `Need more resources to recruit ${raccoon.name}.` };
+        return { ...state, lastMessage: `Need more resources to recruit ${raccoon.name}.`, lastMessageScope: 'collection' };
       }
 
       return {
@@ -391,12 +402,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
         lastSeenAt: action.now,
         lastMessage: `${raccoon.name} joined the crew.`,
+        lastMessageScope: 'collection',
       };
     }
     case 'clearMessage':
       return {
         ...state,
         lastMessage: undefined,
+        lastMessageScope: undefined,
       };
     default:
       return state;
@@ -411,15 +424,15 @@ function hydrateSave(rawSave: string | null, now: number): GameState {
   const parsed = JSON.parse(rawSave) as Partial<GameState>;
   const merged = mergeSavedState(parsed, now);
   const offlineRewards = calculateOfflineRewards(merged, now);
+  const persistedMessage =
+    merged.lastMessage === 'Offline stash is ready to claim.' ? undefined : merged.lastMessage;
 
   return {
     ...merged,
     pendingOfflineRewards: addResources(merged.pendingOfflineRewards, offlineRewards),
     lastSeenAt: now,
-    lastMessage:
-      getResourceTotal(offlineRewards) > 0
-        ? 'Offline stash is ready to claim.'
-        : merged.lastMessage ?? 'Local save loaded.',
+    lastMessage: persistedMessage,
+    lastMessageScope: persistedMessage ? merged.lastMessageScope : undefined,
   };
 }
 
@@ -455,7 +468,18 @@ function mergeSavedState(saved: Partial<GameState>, now: number): GameState {
     lastSeenAt: typeof saved.lastSeenAt === 'number' ? saved.lastSeenAt : now,
     totalRunsClaimed: typeof saved.totalRunsClaimed === 'number' ? saved.totalRunsClaimed : 0,
     lastMessage: saved.lastMessage,
+    lastMessageScope: normalizeMessageScope(saved.lastMessageScope),
   };
+}
+
+function normalizeMessageScope(scope: unknown): MessageScope | undefined {
+  return scope === 'base' ||
+    scope === 'build' ||
+    scope === 'collection' ||
+    scope === 'scavenge' ||
+    scope === 'shop'
+    ? scope
+    : undefined;
 }
 
 function normalizeUnlockedZones(savedZones: unknown): ZoneId[] {
@@ -486,7 +510,9 @@ function normalizeLoot(savedLoot: unknown) {
     return [];
   }
 
-  return savedLoot.filter((lootId): lootId is string => typeof lootId === 'string' && lootId in LOOT_ITEMS);
+  return Array.from(
+    new Set(savedLoot.filter((lootId): lootId is string => typeof lootId === 'string' && lootId in LOOT_ITEMS)),
+  );
 }
 
 function calculateOfflineRewards(state: GameState, now: number): ResourceBundle {

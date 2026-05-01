@@ -1,0 +1,32 @@
+{
+  "frames": {
+    "building_training_crate_stage_02": {
+      "frame": { "x": 0, "y": 338, "w": 386, "h": 426 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 386, "h": 426 },
+      "sourceSize": { "w": 386, "h": 426 }
+    },
+    "building_training_crate_stage_03": {
+      "frame": { "x": 390, "y": 0, "w": 431, "h": 463 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 431, "h": 463 },
+      "sourceSize": { "w": 431, "h": 463 }
+    },
+    "building_training_crate_stage_01": {
+      "frame": { "x": 0, "y": 0, "w": 353, "h": 334 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 353, "h": 334 },
+      "sourceSize": { "w": 353, "h": 334 }
+    }
+  },
+  "meta": {
+    "app": "https://www.leshylabs.com/apps/sstool/",
+    "version": "Leshy SpriteSheet Tool v0.9.1",
+    "image": "building_training_crate_atlas.png",
+    "size": { "w": 821, "h": 764 },
+    "scale": 1
+  }
+}

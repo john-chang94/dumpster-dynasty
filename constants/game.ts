@@ -462,11 +462,11 @@ export function getBuildingUpgradeCost(buildingId: BuildingId, level: number): R
 }
 
 export function getBuildingStage(level: number): 1 | 2 | 3 {
-  if (level >= 5) {
+  if (level >= 4) {
     return 3;
   }
 
-  if (level >= 3) {
+  if (level >= 2) {
     return 2;
   }
 

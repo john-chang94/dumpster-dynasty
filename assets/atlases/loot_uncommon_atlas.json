@@ -1,0 +1,276 @@
+{
+  "frames": {
+    "toy_car": {
+      "frame": {
+        "x": 4,
+        "y": 43,
+        "w": 262,
+        "h": 195
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 262,
+        "h": 195
+      },
+      "sourceSize": {
+        "w": 262,
+        "h": 195
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "teddy_bear": {
+      "frame": {
+        "x": 274,
+        "y": 4,
+        "w": 234,
+        "h": 274
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 234,
+        "h": 274
+      },
+      "sourceSize": {
+        "w": 234,
+        "h": 274
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "spoon": {
+      "frame": {
+        "x": 522,
+        "y": 20,
+        "w": 202,
+        "h": 242
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 202,
+        "h": 242
+      },
+      "sourceSize": {
+        "w": 202,
+        "h": 242
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "star_keychain": {
+      "frame": {
+        "x": 793,
+        "y": 13,
+        "w": 178,
+        "h": 255
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 178,
+        "h": 255
+      },
+      "sourceSize": {
+        "w": 178,
+        "h": 255
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "gold_coin": {
+      "frame": {
+        "x": 41,
+        "y": 318,
+        "w": 187,
+        "h": 195
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 187,
+        "h": 195
+      },
+      "sourceSize": {
+        "w": 187,
+        "h": 195
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "wristwatch": {
+      "frame": {
+        "x": 287,
+        "y": 288,
+        "w": 208,
+        "h": 254
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 208,
+        "h": 254
+      },
+      "sourceSize": {
+        "w": 208,
+        "h": 254
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "cracked_phone": {
+      "frame": {
+        "x": 516,
+        "y": 286,
+        "w": 215,
+        "h": 259
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 215,
+        "h": 259
+      },
+      "sourceSize": {
+        "w": 215,
+        "h": 259
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "sunglasses": {
+      "frame": {
+        "x": 739,
+        "y": 332,
+        "w": 287,
+        "h": 166
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 287,
+        "h": 166
+      },
+      "sourceSize": {
+        "w": 287,
+        "h": 166
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "donut": {
+      "frame": {
+        "x": 17,
+        "y": 574,
+        "w": 235,
+        "h": 214
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 235,
+        "h": 214
+      },
+      "sourceSize": {
+        "w": 235,
+        "h": 214
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "chips_bag": {
+      "frame": {
+        "x": 275,
+        "y": 560,
+        "w": 232,
+        "h": 243
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 232,
+        "h": 243
+      },
+      "sourceSize": {
+        "w": 232,
+        "h": 243
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "rubber_duck": {
+      "frame": {
+        "x": 524,
+        "y": 566,
+        "w": 198,
+        "h": 231
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 198,
+        "h": 231
+      },
+      "sourceSize": {
+        "w": 198,
+        "h": 231
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    "superhero": {
+      "frame": {
+        "x": 779,
+        "y": 553,
+        "w": 206,
+        "h": 257
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 206,
+        "h": 257
+      },
+      "sourceSize": {
+        "w": 206,
+        "h": 257
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    }
+  },
+  "meta": {
+    "image": "atlas.png",
+    "size": {
+      "w": 1030,
+      "h": 814
+    },
+    "scale": 1
+  }
+}
