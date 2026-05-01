@@ -35,6 +35,8 @@ export default function BaseScreen() {
   const now = useRunClock();
   const { state, claimOfflineRewards, tapLootPile, claimRun } = useGame();
   const pendingOfflineTotal = getResourceTotal(state.pendingOfflineRewards);
+  const offlineSummary = state.offlineSummary;
+  const offlineElapsed = offlineSummary ? formatDuration(Math.ceil(offlineSummary.elapsedMs / 1000)) : null;
   const readyRun = state.runs.find((run) => isRunReady(run, now));
   const activeRun = readyRun ?? state.runs[0];
   const activeRunReady = activeRun ? isRunReady(activeRun, now) : false;
@@ -87,6 +89,7 @@ export default function BaseScreen() {
           <OverlayPanel style={styles.offlinePanel}>
             <View style={styles.panelCopy}>
               <Text style={styles.panelKicker}>Offline Stash</Text>
+              {offlineElapsed ? <Text style={styles.bodyText}>Away for {offlineElapsed}</Text> : null}
               <RewardSummary rewards={state.pendingOfflineRewards} />
             </View>
             <ActionButton icon="package-variant-closed-check" onPress={claimOfflineRewards} style={styles.claimButton}>

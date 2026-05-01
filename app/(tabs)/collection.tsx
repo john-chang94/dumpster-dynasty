@@ -2,15 +2,39 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { LootArt, RaccoonArt } from '@/components/game/art';
-import { ActionButton, Card, CostRow, GameScreen, gameColors, MessageBanner, ProgressBar, SectionTitle } from '@/components/game/ui';
-import { hasResources, LOOT_ITEMS, RACCOON_CLASSES, RACCOONS, RaccoonId } from '@/constants/game';
+import {
+  ActionButton,
+  Card,
+  CostRow,
+  GameScreen,
+  gameColors,
+  MessageBanner,
+  ProgressBar,
+  ResourceAmount,
+  SectionTitle,
+} from '@/components/game/ui';
+import {
+  DAILY_QUEST_IDS,
+  DAILY_QUESTS,
+  hasResources,
+  LOOT_ITEMS,
+  MILESTONE_IDS,
+  MILESTONE_REWARDS,
+  RACCOON_CLASSES,
+  RACCOONS,
+  RaccoonId,
+  RESOURCE_KEYS,
+  ResourceCost,
+} from '@/constants/game';
 import { useGame } from '@/state/game-store';
 
+type HubTab = 'quests' | 'collection';
 type CollectionTab = 'raccoons' | 'loot';
 
 export default function CollectionScreen() {
-  const [tab, setTab] = useState<CollectionTab>('raccoons');
-  const { state, recruitRaccoon } = useGame();
+  const [hubTab, setHubTab] = useState<HubTab>('quests');
+  const [collectionTab, setCollectionTab] = useState<CollectionTab>('raccoons');
+  const { state, recruitRaccoon, claimDailyQuestReward, claimMilestoneReward } = useGame();
   const raccoonIds = Object.keys(RACCOONS) as RaccoonId[];
   const lootIds = Object.keys(LOOT_ITEMS);
   const discoveredLootIds = Array.from(new Set(state.discoveredLoot)).filter((lootId) => lootId in LOOT_ITEMS);
@@ -20,89 +44,220 @@ export default function CollectionScreen() {
     ...lootIds.filter((lootId) => !discoveredLootSet.has(lootId)),
   ];
   const recruitedCount = raccoonIds.filter((raccoonId) => state.raccoons[raccoonId].unlocked).length;
-  const progress = tab === 'raccoons' ? recruitedCount / raccoonIds.length : discoveredLootIds.length / lootIds.length;
+  const dailyCompleteCount = DAILY_QUEST_IDS.filter(
+    (questId) => (state.questProgress[questId] ?? 0) >= DAILY_QUESTS[questId].target,
+  ).length;
+  const collectionProgress =
+    collectionTab === 'raccoons' ? recruitedCount / raccoonIds.length : discoveredLootIds.length / lootIds.length;
 
   return (
-    <GameScreen title="Collection" subtitle={`${recruitedCount} crew - ${discoveredLootIds.length} loot finds`}>
+    <GameScreen title="Collection" subtitle={`${dailyCompleteCount} daily - ${discoveredLootIds.length} loot finds`}>
       <MessageBanner scope="collection" />
 
-      <Card style={styles.progressCard}>
-        <View style={styles.progressHeader}>
-          <SectionTitle title="Collection Progress" />
-          <Text style={styles.countBadge}>
-            {tab === 'raccoons' ? `${recruitedCount} / ${raccoonIds.length}` : `${discoveredLootIds.length} / ${lootIds.length}`}
-          </Text>
-        </View>
-        <ProgressBar value={progress} />
+      <Card style={styles.tabsCard}>
         <View style={styles.segmented}>
-          <SegmentButton active={tab === 'raccoons'} label="Raccoons" onPress={() => setTab('raccoons')} />
-          <SegmentButton active={tab === 'loot'} label="Loot" onPress={() => setTab('loot')} />
+          <SegmentButton active={hubTab === 'quests'} label="Quests" onPress={() => setHubTab('quests')} />
+          <SegmentButton active={hubTab === 'collection'} label="Collection" onPress={() => setHubTab('collection')} />
         </View>
       </Card>
 
-      {tab === 'raccoons' ? (
-        <View style={styles.listStack}>
-          {raccoonIds.map((raccoonId) => {
-            const raccoon = RACCOONS[raccoonId];
-            const raccoonState = state.raccoons[raccoonId];
-            const raccoonClass = RACCOON_CLASSES[raccoon.classId];
-            const canRecruit = hasResources(state.resources, raccoon.recruitCost);
+      {hubTab === 'quests' ? (
+        <>
+          <Card style={styles.progressCard}>
+            <View style={styles.progressHeader}>
+              <SectionTitle title="Daily Tasks" />
+              <Text style={styles.countBadge}>
+                {state.claimedDailyQuestIds.length} / {DAILY_QUEST_IDS.length}
+              </Text>
+            </View>
+            <View style={styles.taskList}>
+              {DAILY_QUEST_IDS.map((questId) => {
+                const quest = DAILY_QUESTS[questId];
+                const progress = Math.min(quest.target, state.questProgress[questId] ?? 0);
+                const claimed = state.claimedDailyQuestIds.includes(questId);
+                const ready = progress >= quest.target && !claimed;
 
-            return (
-              <Card key={raccoonId} style={styles.raccoonRow}>
-                <View style={styles.artFrame}>
-                  <RaccoonArt raccoonId={raccoonId} size={86} locked={!raccoonState.unlocked} />
-                </View>
-                <View style={styles.rowCopy}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.cardTitle}>{raccoonState.unlocked ? raccoon.name : '???'}</Text>
-                    <Text style={[styles.classBadge, { backgroundColor: raccoonClass.color }]}>{raccoonClass.label}</Text>
-                  </View>
-                  <Text style={styles.roleText}>{raccoonClass.role}</Text>
-                  <Text style={styles.bodyText}>{raccoonState.unlocked ? raccoon.collectionHint : raccoonClass.bonus}</Text>
-                </View>
-                <View style={styles.actionColumn}>
-                  {raccoonState.unlocked ? (
-                    <Text style={styles.unlockedBadge}>Level {raccoonState.level}</Text>
-                  ) : (
-                    <>
-                      <CostRow cost={raccoon.recruitCost} resources={state.resources} />
-                      <ActionButton disabled={!canRecruit} icon="account-plus" onPress={() => recruitRaccoon(raccoonId)} style={styles.recruitButton}>
-                        Recruit
+                return (
+                  <View key={questId} style={styles.taskRow}>
+                    <View style={styles.taskTop}>
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.taskTitle}>{quest.title}</Text>
+                        <Text style={styles.bodyText}>{quest.description}</Text>
+                      </View>
+                      <RewardPills reward={quest.reward} />
+                    </View>
+                    <ProgressBar value={progress / quest.target} />
+                    <View style={styles.taskBottom}>
+                      <Text style={styles.progressText}>
+                        {progress} / {quest.target}
+                      </Text>
+                      <ActionButton
+                        disabled={!ready}
+                        icon={claimed ? 'check-bold' : 'gift-open'}
+                        onPress={() => claimDailyQuestReward(questId)}
+                        style={styles.claimRewardButton}
+                        tone={ready ? 'primary' : 'plain'}>
+                        {claimed ? 'Claimed' : ready ? 'Claim' : 'Progress'}
                       </ActionButton>
-                    </>
-                  )}
-                </View>
-              </Card>
-            );
-          })}
-        </View>
-      ) : (
-        <View style={styles.listStack}>
-          {orderedLootIds.map((lootId) => {
-            const loot = LOOT_ITEMS[lootId];
-            const discovered = discoveredLootSet.has(lootId);
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
 
-            return (
-              <Card key={lootId} style={styles.lootRow}>
-                <View style={styles.lootFrame}>
-                  <LootArt lootId={lootId} size={58} locked={!discovered} />
-                </View>
-                <View style={styles.rowCopy}>
-                  <Text style={styles.cardTitle}>{discovered ? loot.name : '???'}</Text>
-                  <Text style={[styles.rarityText, styles[loot.rarity]]}>{loot.rarity}</Text>
-                  <Text style={styles.bodyText}>
-                    {discovered
-                      ? loot.flavor
-                      : `Found in ${loot.source === 'alley' ? 'Alley Dumpster' : loot.source === 'backlot' ? 'Apartment Backlot' : 'Convenience Store'}.`}
-                  </Text>
-                </View>
-              </Card>
-            );
-          })}
-        </View>
+          <Card style={styles.progressCard}>
+            <View style={styles.progressHeader}>
+              <SectionTitle title="Milestone Rewards" />
+              <Text style={styles.countBadge}>{state.totalRunsClaimed} runs</Text>
+            </View>
+            <View style={styles.taskList}>
+              {MILESTONE_IDS.map((milestoneId) => {
+                const milestone = MILESTONE_REWARDS[milestoneId];
+                const progress = Math.min(milestone.targetRuns, state.totalRunsClaimed);
+                const claimed = state.claimedMilestoneIds.includes(milestoneId);
+                const ready = progress >= milestone.targetRuns && !claimed;
+
+                return (
+                  <View key={milestoneId} style={styles.taskRow}>
+                    <View style={styles.taskTop}>
+                      <View style={styles.rowCopy}>
+                        <Text style={styles.taskTitle}>{milestone.title}</Text>
+                        <Text style={styles.bodyText}>Keep claiming completed loot runs.</Text>
+                      </View>
+                      <RewardPills reward={milestone.reward} />
+                    </View>
+                    <ProgressBar value={progress / milestone.targetRuns} />
+                    <View style={styles.taskBottom}>
+                      <Text style={styles.progressText}>
+                        {progress} / {milestone.targetRuns}
+                      </Text>
+                      <ActionButton
+                        disabled={!ready}
+                        icon={claimed ? 'check-bold' : 'treasure-chest'}
+                        onPress={() => claimMilestoneReward(milestoneId)}
+                        style={styles.claimRewardButton}
+                        tone={ready ? 'primary' : 'plain'}>
+                        {claimed ? 'Claimed' : ready ? 'Claim' : 'Progress'}
+                      </ActionButton>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+        </>
+      ) : (
+        <>
+          <Card style={styles.progressCard}>
+            <View style={styles.progressHeader}>
+              <SectionTitle title="Collection Progress" />
+              <Text style={styles.countBadge}>
+                {collectionTab === 'raccoons'
+                  ? `${recruitedCount} / ${raccoonIds.length}`
+                  : `${discoveredLootIds.length} / ${lootIds.length}`}
+              </Text>
+            </View>
+            <ProgressBar value={collectionProgress} />
+            <View style={styles.segmented}>
+              <SegmentButton
+                active={collectionTab === 'raccoons'}
+                label="Raccoons"
+                onPress={() => setCollectionTab('raccoons')}
+              />
+              <SegmentButton active={collectionTab === 'loot'} label="Loot" onPress={() => setCollectionTab('loot')} />
+            </View>
+          </Card>
+
+          {collectionTab === 'raccoons' ? (
+            <View style={styles.listStack}>
+              {raccoonIds.map((raccoonId) => {
+                const raccoon = RACCOONS[raccoonId];
+                const raccoonState = state.raccoons[raccoonId];
+                const raccoonClass = RACCOON_CLASSES[raccoon.classId];
+                const canRecruit = hasResources(state.resources, raccoon.recruitCost);
+
+                return (
+                  <Card key={raccoonId} style={styles.raccoonRow}>
+                    <View style={styles.artFrame}>
+                      <RaccoonArt raccoonId={raccoonId} size={86} locked={!raccoonState.unlocked} />
+                    </View>
+                    <View style={styles.rowCopy}>
+                      <View style={styles.nameRow}>
+                        <Text style={styles.cardTitle}>{raccoonState.unlocked ? raccoon.name : '???'}</Text>
+                        <Text style={[styles.classBadge, { backgroundColor: raccoonClass.color }]}>
+                          {raccoonClass.label}
+                        </Text>
+                      </View>
+                      <Text style={styles.roleText}>{raccoonClass.role}</Text>
+                      <Text style={styles.bodyText}>
+                        {raccoonState.unlocked ? raccoon.collectionHint : raccoonClass.bonus}
+                      </Text>
+                    </View>
+                    <View style={styles.actionColumn}>
+                      {raccoonState.unlocked ? (
+                        <Text style={styles.unlockedBadge}>Level {raccoonState.level}</Text>
+                      ) : (
+                        <>
+                          <CostRow cost={raccoon.recruitCost} resources={state.resources} />
+                          <ActionButton
+                            disabled={!canRecruit}
+                            icon="account-plus"
+                            onPress={() => recruitRaccoon(raccoonId)}
+                            style={styles.recruitButton}>
+                            Recruit
+                          </ActionButton>
+                        </>
+                      )}
+                    </View>
+                  </Card>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.listStack}>
+              {orderedLootIds.map((lootId) => {
+                const loot = LOOT_ITEMS[lootId];
+                const discovered = discoveredLootSet.has(lootId);
+
+                return (
+                  <Card key={lootId} style={styles.lootRow}>
+                    <View style={styles.lootFrame}>
+                      <LootArt lootId={lootId} size={58} locked={!discovered} />
+                    </View>
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.cardTitle}>{discovered ? loot.name : '???'}</Text>
+                      <Text style={[styles.rarityText, styles[loot.rarity]]}>{loot.rarity}</Text>
+                      <Text style={styles.bodyText}>
+                        {discovered
+                          ? loot.flavor
+                          : `Found in ${
+                              loot.source === 'alley'
+                                ? 'Alley Dumpster'
+                                : loot.source === 'backlot'
+                                  ? 'Apartment Backlot'
+                                  : 'Convenience Store'
+                            }.`}
+                      </Text>
+                    </View>
+                  </Card>
+                );
+              })}
+            </View>
+          )}
+        </>
       )}
     </GameScreen>
+  );
+}
+
+function RewardPills({ reward }: { reward: ResourceCost }) {
+  return (
+    <View style={styles.rewardPills}>
+      {RESOURCE_KEYS.filter((key) => (reward[key] ?? 0) > 0).map((key) => (
+        <ResourceAmount key={key} amount={reward[key] ?? 0} resourceKey={key} />
+      ))}
+    </View>
   );
 }
 
@@ -115,6 +270,9 @@ function SegmentButton({ active, label, onPress }: { active: boolean; label: str
 }
 
 const styles = StyleSheet.create({
+  tabsCard: {
+    padding: 8,
+  },
   progressCard: {
     gap: 11,
   },
@@ -147,8 +305,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 6,
     flex: 1,
-    minHeight: 38,
     justifyContent: 'center',
+    minHeight: 38,
   },
   segmentButtonActive: {
     backgroundColor: '#FFF1D4',
@@ -160,6 +318,51 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: gameColors.ink,
+  },
+  taskList: {
+    gap: 9,
+  },
+  taskRow: {
+    backgroundColor: '#FFF7E8',
+    borderColor: 'rgba(84, 52, 25, 0.16)',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    padding: 9,
+  },
+  taskTop: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  taskTitle: {
+    color: gameColors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  taskBottom: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  progressText: {
+    color: gameColors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  rewardPills: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    justifyContent: 'flex-end',
+    maxWidth: 150,
+  },
+  claimRewardButton: {
+    minHeight: 34,
+    minWidth: 96,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   listStack: {
     gap: 10,
@@ -199,6 +402,7 @@ const styles = StyleSheet.create({
   rowCopy: {
     flex: 1,
     gap: 5,
+    minWidth: 0,
   },
   nameRow: {
     alignItems: 'center',

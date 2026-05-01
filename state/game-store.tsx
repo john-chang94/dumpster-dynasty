@@ -3,14 +3,22 @@ import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useRe
 import { AppState } from 'react-native';
 
 import {
+  ACTIVE_ENCOUNTER_CHOICES,
+  ActiveEncounterChoiceId,
+  ActiveEncounterResult,
   addResources,
   BUILDINGS,
   BuildingId,
   createResourceBundle,
-  EMPTY_RESOURCES,
+  DAILY_QUEST_IDS,
+  DAILY_QUESTS,
   getBuildingUpgradeCost,
   hasResources,
   LOOT_ITEMS,
+  MILESTONE_IDS,
+  MILESTONE_REWARDS,
+  MilestoneId,
+  QuestId,
   RACCOON_CLASSES,
   RACCOONS,
   RaccoonId,
@@ -28,6 +36,15 @@ const OFFLINE_CAP_HOURS = 8;
 export type BuildingState = Record<BuildingId, { level: number }>;
 export type RaccoonState = Record<RaccoonId, { unlocked: boolean; level: number }>;
 export type MessageScope = 'base' | 'build' | 'collection' | 'scavenge' | 'shop';
+export type QuestProgress = Record<QuestId, number>;
+
+export type OfflineSummary = {
+  startedAt: number;
+  endedAt: number;
+  elapsedMs: number;
+  rewards: ResourceBundle;
+  cappedHours: number;
+};
 
 export type ScavengeRun = {
   id: string;
@@ -35,6 +52,10 @@ export type ScavengeRun = {
   raccoonId: RaccoonId;
   startedAt: number;
   durationSec: number;
+  encounterResolved: boolean;
+  resourceMultiplier: number;
+  rareBonus: number;
+  encounterResult?: ActiveEncounterResult;
 };
 
 export type GameState = {
@@ -45,6 +66,11 @@ export type GameState = {
   runs: ScavengeRun[];
   discoveredLoot: string[];
   pendingOfflineRewards: ResourceBundle;
+  offlineSummary?: OfflineSummary;
+  dailyQuestDate: string;
+  questProgress: QuestProgress;
+  claimedDailyQuestIds: QuestId[];
+  claimedMilestoneIds: MilestoneId[];
   lastSeenAt: number;
   totalRunsClaimed: number;
   lastMessage?: string;
@@ -60,6 +86,10 @@ type GameAction =
   | { type: 'upgradeBuilding'; buildingId: BuildingId; now: number }
   | { type: 'unlockZone'; zoneId: ZoneId; now: number }
   | { type: 'recruitRaccoon'; raccoonId: RaccoonId; now: number }
+  | { type: 'claimDailyQuestReward'; questId: QuestId; now: number }
+  | { type: 'claimMilestoneReward'; milestoneId: MilestoneId; now: number }
+  | { type: 'resolveActiveEncounter'; runId: string; choiceId: ActiveEncounterChoiceId; now: number }
+  | { type: 'dismissOfflineSummary'; now: number }
   | { type: 'clearMessage' };
 
 type GameContextValue = {
@@ -72,6 +102,10 @@ type GameContextValue = {
   upgradeBuilding: (buildingId: BuildingId) => void;
   unlockZone: (zoneId: ZoneId) => void;
   recruitRaccoon: (raccoonId: RaccoonId) => void;
+  claimDailyQuestReward: (questId: QuestId) => void;
+  claimMilestoneReward: (milestoneId: MilestoneId) => void;
+  resolveActiveEncounter: (runId: string, choiceId: ActiveEncounterChoiceId) => void;
+  dismissOfflineSummary: () => void;
   clearMessage: () => void;
 };
 
@@ -149,6 +183,13 @@ export function GameProvider({ children }: PropsWithChildren) {
       unlockZone: (zoneId) => dispatch({ type: 'unlockZone', zoneId, now: Date.now() }),
       recruitRaccoon: (raccoonId) =>
         dispatch({ type: 'recruitRaccoon', raccoonId, now: Date.now() }),
+      claimDailyQuestReward: (questId) =>
+        dispatch({ type: 'claimDailyQuestReward', questId, now: Date.now() }),
+      claimMilestoneReward: (milestoneId) =>
+        dispatch({ type: 'claimMilestoneReward', milestoneId, now: Date.now() }),
+      resolveActiveEncounter: (runId, choiceId) =>
+        dispatch({ type: 'resolveActiveEncounter', runId, choiceId, now: Date.now() }),
+      dismissOfflineSummary: () => dispatch({ type: 'dismissOfflineSummary', now: Date.now() }),
       clearMessage: () => dispatch({ type: 'clearMessage' }),
     }),
     [loaded, state],
@@ -199,11 +240,36 @@ export function createInitialState(now = Date.now()): GameState {
     runs: [],
     discoveredLoot: [],
     pendingOfflineRewards: createResourceBundle(),
+    offlineSummary: undefined,
+    dailyQuestDate: getLocalDateKey(now),
+    questProgress: createQuestProgress(),
+    claimedDailyQuestIds: [],
+    claimedMilestoneIds: [],
     lastSeenAt: now,
     totalRunsClaimed: 0,
     lastMessage: 'Tap the loot pile, send Scout out, then upgrade the base.',
     lastMessageScope: 'base',
   };
+}
+
+export function getEncounterChoiceChance(choiceId: ActiveEncounterChoiceId, raccoonId: RaccoonId) {
+  const choice = ACTIVE_ENCOUNTER_CHOICES[choiceId];
+  const raccoon = RACCOONS[raccoonId];
+  let chance = choice.baseChance;
+
+  if (choiceId === 'dash' && raccoon.classId === 'scout') {
+    chance += 0.14;
+  }
+
+  if (choiceId === 'grab' && raccoon.classId === 'hauler') {
+    chance += 0.14;
+  }
+
+  if (choiceId === 'hide' && raccoon.classId === 'sneak') {
+    chance += 0.14;
+  }
+
+  return clampNumber(chance, 0.05, 0.95);
 }
 
 export function isRunReady(run: ScavengeRun, now = Date.now()) {
@@ -237,6 +303,10 @@ export function getResourceTotal(resources: ResourceCost) {
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
+  if ('now' in action) {
+    state = ensureDailyQuests(state, action.now);
+  }
+
   switch (action.type) {
     case 'hydrate':
       return action.state;
@@ -244,30 +314,33 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (getResourceTotal(state.pendingOfflineRewards) <= 0) {
         return {
           ...state,
+          offlineSummary: undefined,
           lastMessage: 'No offline stash waiting yet.',
           lastMessageScope: 'base',
         };
       }
 
-      return {
+      return incrementQuestProgress({
         ...state,
         resources: addResources(state.resources, state.pendingOfflineRewards),
         pendingOfflineRewards: createResourceBundle(),
+        offlineSummary: undefined,
         lastSeenAt: action.now,
         lastMessage: 'Offline stash claimed.',
         lastMessageScope: 'base',
-      };
+      }, 'collect_scrap', state.pendingOfflineRewards.scrap);
     case 'tapLootPile': {
       const shinies = Math.random() < 0.16 ? 1 : 0;
+      const reward = { food: 12, scrap: 9, shinies };
 
-      return {
+      return incrementQuestProgress({
         ...state,
-        resources: addResources(state.resources, { food: 12, scrap: 9, shinies }),
+        resources: addResources(state.resources, reward),
         discoveredLoot: maybeDiscoverLoot(state.discoveredLoot, ['pizza_crust', 'soda_can'], 0.35),
         lastSeenAt: action.now,
         lastMessage: shinies > 0 ? 'Loot pile had a shiny tucked under it.' : 'Loot pile sorted.',
         lastMessageScope: 'base',
-      };
+      }, 'collect_scrap', reward.scrap);
     }
     case 'startRun': {
       const zone = ZONES[action.zoneId];
@@ -289,7 +362,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         return { ...state, lastMessage: `${zone.name} already has a run in progress.`, lastMessageScope: 'scavenge' };
       }
 
-      return {
+      return incrementQuestProgress({
         ...state,
         runs: [
           ...state.runs,
@@ -299,12 +372,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             raccoonId: action.raccoonId,
             startedAt: action.now,
             durationSec: getAdjustedRunDuration(state, action.zoneId, action.raccoonId),
+            encounterResolved: false,
+            resourceMultiplier: 0,
+            rareBonus: 0,
           },
         ],
         lastSeenAt: action.now,
         lastMessage: `${raccoon.name} headed for ${zone.name}.`,
         lastMessageScope: 'scavenge',
-      };
+      }, 'send_scavenges', 1);
     }
     case 'claimRun': {
       const run = state.runs.find((candidate) => candidate.id === action.runId);
@@ -323,7 +399,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         : state.discoveredLoot;
       const lootName = reward.lootId ? LOOT_ITEMS[reward.lootId].name : null;
 
-      return {
+      return incrementQuestProgress({
         ...state,
         resources: addResources(state.resources, reward.resources),
         runs: state.runs.filter((candidate) => candidate.id !== run.id),
@@ -332,7 +408,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         lastSeenAt: action.now,
         lastMessage: lootName ? `Run claimed. New find: ${lootName}.` : 'Run claimed.',
         lastMessageScope: action.scope ?? 'scavenge',
-      };
+      }, 'collect_scrap', reward.resources.scrap);
     }
     case 'upgradeBuilding': {
       const building = BUILDINGS[action.buildingId];
@@ -347,7 +423,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         return { ...state, lastMessage: `Need more resources for ${building.name}.`, lastMessageScope: 'build' };
       }
 
-      return {
+      return incrementQuestProgress({
         ...state,
         resources: subtractResources(state.resources, cost),
         buildings: {
@@ -357,7 +433,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         lastSeenAt: action.now,
         lastMessage: `${building.name} upgraded to Level ${level + 1}.`,
         lastMessageScope: 'build',
-      };
+      }, 'upgrade_building', 1);
     }
     case 'unlockZone': {
       const zone = ZONES[action.zoneId];
@@ -405,6 +481,86 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         lastMessageScope: 'collection',
       };
     }
+    case 'claimDailyQuestReward': {
+      const quest = DAILY_QUESTS[action.questId];
+
+      if (state.claimedDailyQuestIds.includes(action.questId)) {
+        return { ...state, lastMessage: `${quest.title} is already claimed.`, lastMessageScope: 'collection' };
+      }
+
+      if ((state.questProgress[action.questId] ?? 0) < quest.target) {
+        return { ...state, lastMessage: `${quest.title} is not complete yet.`, lastMessageScope: 'collection' };
+      }
+
+      return {
+        ...state,
+        resources: addResources(state.resources, quest.reward),
+        claimedDailyQuestIds: addUnique(state.claimedDailyQuestIds, action.questId),
+        lastSeenAt: action.now,
+        lastMessage: `${quest.title} reward claimed.`,
+        lastMessageScope: 'collection',
+      };
+    }
+    case 'claimMilestoneReward': {
+      const milestone = MILESTONE_REWARDS[action.milestoneId];
+
+      if (state.claimedMilestoneIds.includes(action.milestoneId)) {
+        return { ...state, lastMessage: `${milestone.title} is already claimed.`, lastMessageScope: 'collection' };
+      }
+
+      if (state.totalRunsClaimed < milestone.targetRuns) {
+        return { ...state, lastMessage: `${milestone.title} is not complete yet.`, lastMessageScope: 'collection' };
+      }
+
+      return {
+        ...state,
+        resources: addResources(state.resources, milestone.reward),
+        claimedMilestoneIds: addUnique(state.claimedMilestoneIds, action.milestoneId),
+        lastSeenAt: action.now,
+        lastMessage: `${milestone.title} milestone claimed.`,
+        lastMessageScope: 'collection',
+      };
+    }
+    case 'resolveActiveEncounter': {
+      const run = state.runs.find((candidate) => candidate.id === action.runId);
+
+      if (!run) {
+        return { ...state, lastMessage: 'That run is no longer active.', lastMessageScope: 'scavenge' };
+      }
+
+      if (run.encounterResolved) {
+        return { ...state, lastMessage: 'That encounter is already resolved.', lastMessageScope: 'scavenge' };
+      }
+
+      const result = resolveEncounterChoice(run, action.choiceId, action.now);
+      const nextRuns = state.runs.map((candidate) =>
+        candidate.id === run.id
+          ? {
+              ...candidate,
+              durationSec: Math.max(15, candidate.durationSec + result.durationDeltaSec),
+              encounterResolved: true,
+              resourceMultiplier: Math.max(0, candidate.resourceMultiplier + result.resourceMultiplierDelta),
+              rareBonus: Math.max(0, candidate.rareBonus + result.rareBonusDelta),
+              encounterResult: result,
+            }
+          : candidate,
+      );
+
+      return incrementQuestProgress({
+        ...state,
+        resources: addResources(state.resources, result.immediateReward),
+        runs: nextRuns,
+        lastSeenAt: action.now,
+        lastMessage: result.message,
+        lastMessageScope: 'scavenge',
+      }, 'collect_scrap', result.immediateReward.scrap);
+    }
+    case 'dismissOfflineSummary':
+      return {
+        ...state,
+        offlineSummary: undefined,
+        lastSeenAt: action.now,
+      };
     case 'clearMessage':
       return {
         ...state,
@@ -422,14 +578,20 @@ function hydrateSave(rawSave: string | null, now: number): GameState {
   }
 
   const parsed = JSON.parse(rawSave) as Partial<GameState>;
-  const merged = mergeSavedState(parsed, now);
+  const merged = ensureDailyQuests(mergeSavedState(parsed, now), now);
   const offlineRewards = calculateOfflineRewards(merged, now);
+  const pendingOfflineRewards = addResources(merged.pendingOfflineRewards, offlineRewards);
   const persistedMessage =
     merged.lastMessage === 'Offline stash is ready to claim.' ? undefined : merged.lastMessage;
+  const offlineSummary =
+    getResourceTotal(offlineRewards) > 0
+      ? createOfflineSummary(merged.lastSeenAt, now, pendingOfflineRewards)
+      : createPersistedOfflineSummary(merged.offlineSummary, now, pendingOfflineRewards);
 
   return {
     ...merged,
-    pendingOfflineRewards: addResources(merged.pendingOfflineRewards, offlineRewards),
+    pendingOfflineRewards,
+    offlineSummary,
     lastSeenAt: now,
     lastMessage: persistedMessage,
     lastMessageScope: persistedMessage ? merged.lastMessageScope : undefined,
@@ -465,6 +627,11 @@ function mergeSavedState(saved: Partial<GameState>, now: number): GameState {
     runs: normalizeRuns(saved.runs),
     discoveredLoot: normalizeLoot(saved.discoveredLoot),
     pendingOfflineRewards: createResourceBundle(saved.pendingOfflineRewards),
+    offlineSummary: normalizeOfflineSummary(saved.offlineSummary),
+    dailyQuestDate: typeof saved.dailyQuestDate === 'string' ? saved.dailyQuestDate : getLocalDateKey(now),
+    questProgress: normalizeQuestProgress(saved.questProgress),
+    claimedDailyQuestIds: normalizeQuestIds(saved.claimedDailyQuestIds),
+    claimedMilestoneIds: normalizeMilestoneIds(saved.claimedMilestoneIds),
     lastSeenAt: typeof saved.lastSeenAt === 'number' ? saved.lastSeenAt : now,
     totalRunsClaimed: typeof saved.totalRunsClaimed === 'number' ? saved.totalRunsClaimed : 0,
     lastMessage: saved.lastMessage,
@@ -494,15 +661,27 @@ function normalizeRuns(savedRuns: unknown): ScavengeRun[] {
     return [];
   }
 
-  return savedRuns.filter((run): run is ScavengeRun => {
-    return (
-      typeof run?.id === 'string' &&
-      run.zoneId in ZONES &&
-      run.raccoonId in RACCOONS &&
-      typeof run.startedAt === 'number' &&
-      typeof run.durationSec === 'number'
-    );
-  });
+  return savedRuns
+    .filter((run) => {
+      return (
+        typeof run?.id === 'string' &&
+        run.zoneId in ZONES &&
+        run.raccoonId in RACCOONS &&
+        typeof run.startedAt === 'number' &&
+        typeof run.durationSec === 'number'
+      );
+    })
+    .map((run) => ({
+      id: run.id,
+      zoneId: run.zoneId,
+      raccoonId: run.raccoonId,
+      startedAt: run.startedAt,
+      durationSec: Math.max(15, Math.floor(run.durationSec)),
+      encounterResolved: Boolean(run.encounterResolved),
+      resourceMultiplier: normalizeBonus(run.resourceMultiplier),
+      rareBonus: normalizeBonus(run.rareBonus),
+      encounterResult: normalizeEncounterResult(run.encounterResult),
+    }));
 }
 
 function normalizeLoot(savedLoot: unknown) {
@@ -513,6 +692,243 @@ function normalizeLoot(savedLoot: unknown) {
   return Array.from(
     new Set(savedLoot.filter((lootId): lootId is string => typeof lootId === 'string' && lootId in LOOT_ITEMS)),
   );
+}
+
+function normalizeQuestProgress(savedProgress: unknown): QuestProgress {
+  const progress = createQuestProgress();
+
+  if (!savedProgress || typeof savedProgress !== 'object') {
+    return progress;
+  }
+
+  DAILY_QUEST_IDS.forEach((questId) => {
+    const value = (savedProgress as Partial<Record<QuestId, unknown>>)[questId];
+
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      progress[questId] = Math.min(DAILY_QUESTS[questId].target, Math.max(0, Math.floor(value)));
+    }
+  });
+
+  return progress;
+}
+
+function normalizeQuestIds(savedIds: unknown): QuestId[] {
+  if (!Array.isArray(savedIds)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(savedIds.filter((questId): questId is QuestId => (DAILY_QUEST_IDS as string[]).includes(questId))),
+  );
+}
+
+function normalizeMilestoneIds(savedIds: unknown): MilestoneId[] {
+  if (!Array.isArray(savedIds)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      savedIds.filter((milestoneId): milestoneId is MilestoneId =>
+        (MILESTONE_IDS as string[]).includes(milestoneId),
+      ),
+    ),
+  );
+}
+
+function normalizeOfflineSummary(savedSummary: unknown): OfflineSummary | undefined {
+  if (!savedSummary || typeof savedSummary !== 'object') {
+    return undefined;
+  }
+
+  const summary = savedSummary as Partial<OfflineSummary>;
+
+  if (
+    typeof summary.startedAt !== 'number' ||
+    typeof summary.endedAt !== 'number' ||
+    typeof summary.elapsedMs !== 'number'
+  ) {
+    return undefined;
+  }
+
+  return {
+    startedAt: summary.startedAt,
+    endedAt: summary.endedAt,
+    elapsedMs: Math.max(0, summary.elapsedMs),
+    rewards: createResourceBundle(summary.rewards),
+    cappedHours: typeof summary.cappedHours === 'number' ? summary.cappedHours : OFFLINE_CAP_HOURS,
+  };
+}
+
+function normalizeEncounterResult(savedResult: unknown): ActiveEncounterResult | undefined {
+  if (!savedResult || typeof savedResult !== 'object') {
+    return undefined;
+  }
+
+  const result = savedResult as Partial<ActiveEncounterResult>;
+
+  if (
+    result.choiceId !== 'hide' &&
+    result.choiceId !== 'dash' &&
+    result.choiceId !== 'grab'
+  ) {
+    return undefined;
+  }
+
+  return {
+    choiceId: result.choiceId,
+    success: Boolean(result.success),
+    message: typeof result.message === 'string' ? result.message : 'Encounter resolved.',
+    resourceMultiplierDelta: normalizeBonus(result.resourceMultiplierDelta),
+    rareBonusDelta: normalizeBonus(result.rareBonusDelta),
+    durationDeltaSec: typeof result.durationDeltaSec === 'number' ? Math.round(result.durationDeltaSec) : 0,
+    immediateReward: createResourceBundle(result.immediateReward),
+    resolvedAt: typeof result.resolvedAt === 'number' ? result.resolvedAt : Date.now(),
+  };
+}
+
+function createQuestProgress(): QuestProgress {
+  return {
+    send_scavenges: 0,
+    collect_scrap: 0,
+    upgrade_building: 0,
+  };
+}
+
+function getLocalDateKey(now: number) {
+  const date = new Date(now);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function ensureDailyQuests(state: GameState, now: number): GameState {
+  const today = getLocalDateKey(now);
+
+  if (state.dailyQuestDate === today) {
+    return state;
+  }
+
+  return {
+    ...state,
+    dailyQuestDate: today,
+    questProgress: createQuestProgress(),
+    claimedDailyQuestIds: [],
+  };
+}
+
+function incrementQuestProgress(state: GameState, questId: QuestId, amount: number): GameState {
+  if (amount <= 0 || state.claimedDailyQuestIds.includes(questId)) {
+    return state;
+  }
+
+  const quest = DAILY_QUESTS[questId];
+  const current = state.questProgress[questId] ?? 0;
+  const nextValue = Math.min(quest.target, current + Math.floor(amount));
+
+  if (nextValue === current) {
+    return state;
+  }
+
+  return {
+    ...state,
+    questProgress: {
+      ...state.questProgress,
+      [questId]: nextValue,
+    },
+  };
+}
+
+function createOfflineSummary(startedAt: number, endedAt: number, rewards: ResourceBundle): OfflineSummary {
+  const elapsedMs = Math.min(Math.max(0, endedAt - startedAt), OFFLINE_CAP_HOURS * 3_600_000);
+
+  return {
+    startedAt,
+    endedAt,
+    elapsedMs,
+    rewards,
+    cappedHours: OFFLINE_CAP_HOURS,
+  };
+}
+
+function createPersistedOfflineSummary(
+  savedSummary: OfflineSummary | undefined,
+  now: number,
+  rewards: ResourceBundle,
+): OfflineSummary | undefined {
+  if (getResourceTotal(rewards) <= 0) {
+    return undefined;
+  }
+
+  return savedSummary
+    ? { ...savedSummary, rewards }
+    : createOfflineSummary(now, now, rewards);
+}
+
+function resolveEncounterChoice(
+  run: ScavengeRun,
+  choiceId: ActiveEncounterChoiceId,
+  now: number,
+): ActiveEncounterResult {
+  const choice = ACTIVE_ENCOUNTER_CHOICES[choiceId];
+  const raccoon = RACCOONS[run.raccoonId];
+  const success = Math.random() < getEncounterChoiceChance(choiceId, run.raccoonId);
+  let resourceMultiplierDelta = 0;
+  let rareBonusDelta = 0;
+  let durationDeltaSec = 0;
+  let immediateReward = createResourceBundle();
+
+  if (success) {
+    resourceMultiplierDelta = choice.rewardMultiplier;
+    rareBonusDelta = choice.rareBonus + (raccoon.classId === 'sniffer' ? 0.08 : 0);
+    durationDeltaSec = choice.durationReductionPct > 0 ? -Math.round(run.durationSec * choice.durationReductionPct) : 0;
+    immediateReward = createResourceBundle(
+      raccoon.classId === 'hauler' && choiceId === 'grab'
+        ? addResources(createResourceBundle(choice.immediateReward), { scrap: 8 })
+        : choice.immediateReward,
+    );
+  } else if (choiceId === 'grab') {
+    durationDeltaSec = Math.round(run.durationSec * 0.15);
+  } else if (choiceId === 'dash') {
+    durationDeltaSec = Math.round(run.durationSec * 0.08);
+  }
+
+  return {
+    choiceId,
+    success,
+    message: getEncounterMessage(choiceId, raccoon.name, success),
+    resourceMultiplierDelta,
+    rareBonusDelta,
+    durationDeltaSec,
+    immediateReward,
+    resolvedAt: now,
+  };
+}
+
+function getEncounterMessage(choiceId: ActiveEncounterChoiceId, raccoonName: string, success: boolean) {
+  if (success && choiceId === 'hide') {
+    return `${raccoonName} stayed quiet. Safer loot chance improved.`;
+  }
+
+  if (success && choiceId === 'dash') {
+    return `${raccoonName} slipped through fast. Timer shortened.`;
+  }
+
+  if (success && choiceId === 'grab') {
+    return `${raccoonName} grabbed extra supplies.`;
+  }
+
+  if (choiceId === 'hide') {
+    return `${raccoonName} waited it out. No bonus this time.`;
+  }
+
+  if (choiceId === 'dash') {
+    return `${raccoonName} stumbled and lost a little time.`;
+  }
+
+  return `${raccoonName} made noise. The route takes longer.`;
 }
 
 function calculateOfflineRewards(state: GameState, now: number): ResourceBundle {
@@ -542,21 +958,28 @@ function rollRunReward(state: GameState, run: ScavengeRun) {
   const snackBonus = 1 + (state.buildings.snack.level - 1) * 0.12;
   const sortBonus = 1 + (state.buildings.sort.level - 1) * 0.12;
   const vaultBonus = 1 + (state.buildings.vault.level - 1) * 0.1;
+  const encounterBonus = 1 + Math.max(0, run.resourceMultiplier);
   const variance = 0.88 + Math.random() * 0.28;
   const resources = createResourceBundle({
-    food: zone.baseRewards.food * snackBonus * variance,
+    food: zone.baseRewards.food * snackBonus * variance * encounterBonus,
     scrap:
       zone.baseRewards.scrap *
       sortBonus *
       variance *
-      (raccoon.classId === 'hauler' ? 1.35 : 1),
+      (raccoon.classId === 'hauler' ? 1.35 : 1) *
+      encounterBonus,
     shinies:
       (zone.baseRewards.shinies + (raccoon.classId === 'sneak' ? 1 : 0)) *
       vaultBonus *
-      variance,
+      variance *
+      encounterBonus,
   });
   const classRareBonus = raccoon.classId === 'sniffer' ? 0.22 : raccoon.classId === 'sneak' ? 0.08 : 0;
-  const rareChance = zone.rareChance + classRareBonus + (state.buildings.vault.level - 1) * 0.025;
+  const rareChance = clampNumber(
+    zone.rareChance + classRareBonus + run.rareBonus + (state.buildings.vault.level - 1) * 0.025,
+    0,
+    0.95,
+  );
   const undiscoveredLoot = zone.loot.filter((lootId) => !state.discoveredLoot.includes(lootId));
   const lootPool = undiscoveredLoot.length > 0 ? undiscoveredLoot : zone.loot;
   const lootId = Math.random() < rareChance ? lootPool[Math.floor(Math.random() * lootPool.length)] : undefined;
@@ -601,6 +1024,14 @@ function clampLevel(value: unknown, maxLevel: number) {
   }
 
   return Math.max(1, Math.min(maxLevel, Math.floor(value)));
+}
+
+function normalizeBonus(value: unknown) {
+  return typeof value === 'number' && !Number.isNaN(value) ? clampNumber(value, 0, 2) : 0;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 const saveState = debounce((state: GameState) => {

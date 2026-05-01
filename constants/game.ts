@@ -5,8 +5,49 @@ export type RaccoonId = 'scout' | 'hauler' | 'sniffer' | 'sneak';
 export type ZoneId = 'alley' | 'backlot' | 'store';
 export type BuildingId = 'nest' | 'snack' | 'sort' | 'vault' | 'training';
 export type LootRarity = 'common' | 'uncommon' | 'rare';
+export type QuestId = 'send_scavenges' | 'collect_scrap' | 'upgrade_building';
+export type MilestoneId = 'runs_3' | 'runs_8' | 'runs_15' | 'runs_30';
+export type ActiveEncounterChoiceId = 'hide' | 'dash' | 'grab';
 
 export type ResourceCost = Partial<ResourceBundle>;
+
+export type QuestDefinition = {
+  id: QuestId;
+  title: string;
+  description: string;
+  target: number;
+  reward: ResourceCost;
+};
+
+export type MilestoneDefinition = {
+  id: MilestoneId;
+  title: string;
+  targetRuns: number;
+  reward: ResourceCost;
+};
+
+export type ActiveEncounterChoice = {
+  id: ActiveEncounterChoiceId;
+  label: string;
+  description: string;
+  baseChance: number;
+  rewardMultiplier: number;
+  rareBonus: number;
+  durationReductionPct: number;
+  immediateReward: ResourceCost;
+  risk: 'Low' | 'Medium' | 'High';
+};
+
+export type ActiveEncounterResult = {
+  choiceId: ActiveEncounterChoiceId;
+  success: boolean;
+  message: string;
+  resourceMultiplierDelta: number;
+  rareBonusDelta: number;
+  durationDeltaSec: number;
+  immediateReward: ResourceBundle;
+  resolvedAt: number;
+};
 
 export const RESOURCE_KEYS: ResourceKey[] = ['food', 'scrap', 'shinies'];
 
@@ -46,6 +87,97 @@ export const RESOURCE_CONFIG: Record<
     color: '#1681D8',
     background: '#D9EEFF',
     icon: 'diamond-stone',
+  },
+};
+
+export const DAILY_QUESTS: Record<QuestId, QuestDefinition> = {
+  send_scavenges: {
+    id: 'send_scavenges',
+    title: 'Send 3 scavenges',
+    description: 'Assign crew to loot routes.',
+    target: 3,
+    reward: { food: 60, scrap: 40 },
+  },
+  collect_scrap: {
+    id: 'collect_scrap',
+    title: 'Collect 200 scrap',
+    description: 'Claim hauls, sort the pile, or collect offline scrap.',
+    target: 200,
+    reward: { scrap: 90, shinies: 1 },
+  },
+  upgrade_building: {
+    id: 'upgrade_building',
+    title: 'Upgrade 1 building',
+    description: 'Spend resources to grow the base.',
+    target: 1,
+    reward: { food: 80, shinies: 1 },
+  },
+};
+
+export const DAILY_QUEST_IDS: QuestId[] = ['send_scavenges', 'collect_scrap', 'upgrade_building'];
+
+export const MILESTONE_REWARDS: Record<MilestoneId, MilestoneDefinition> = {
+  runs_3: {
+    id: 'runs_3',
+    title: 'Claim 3 runs',
+    targetRuns: 3,
+    reward: { food: 100, scrap: 80 },
+  },
+  runs_8: {
+    id: 'runs_8',
+    title: 'Claim 8 runs',
+    targetRuns: 8,
+    reward: { food: 180, scrap: 150, shinies: 2 },
+  },
+  runs_15: {
+    id: 'runs_15',
+    title: 'Claim 15 runs',
+    targetRuns: 15,
+    reward: { food: 300, scrap: 260, shinies: 4 },
+  },
+  runs_30: {
+    id: 'runs_30',
+    title: 'Claim 30 runs',
+    targetRuns: 30,
+    reward: { food: 500, scrap: 450, shinies: 8 },
+  },
+};
+
+export const MILESTONE_IDS: MilestoneId[] = ['runs_3', 'runs_8', 'runs_15', 'runs_30'];
+
+export const ACTIVE_ENCOUNTER_CHOICES: Record<ActiveEncounterChoiceId, ActiveEncounterChoice> = {
+  hide: {
+    id: 'hide',
+    label: 'Hide',
+    description: 'Wait out trouble for a safer haul bonus.',
+    baseChance: 0.82,
+    rewardMultiplier: 0.08,
+    rareBonus: 0.05,
+    durationReductionPct: 0,
+    immediateReward: {},
+    risk: 'Low',
+  },
+  dash: {
+    id: 'dash',
+    label: 'Dash',
+    description: 'Move fast and cut time off the route.',
+    baseChance: 0.68,
+    rewardMultiplier: 0.04,
+    rareBonus: 0.02,
+    durationReductionPct: 0.35,
+    immediateReward: {},
+    risk: 'Medium',
+  },
+  grab: {
+    id: 'grab',
+    label: 'Grab',
+    description: 'Snatch extra loot now with a higher chance of trouble.',
+    baseChance: 0.52,
+    rewardMultiplier: 0.25,
+    rareBonus: 0.1,
+    durationReductionPct: 0,
+    immediateReward: { food: 12, scrap: 10 },
+    risk: 'High',
   },
 };
 
@@ -173,7 +305,7 @@ export const ZONES: Record<
     baseRewards: { food: 55, scrap: 78, shinies: 1 },
     rareChance: 0.2,
     risk: 'Medium',
-    unlockCost: { food: 120, scrap: 110 },
+    unlockCost: { food: 100, scrap: 95 },
     loot: ['toy_car', 'teddy_bear', 'old_sock', 'bent_spoon', 'rubber_duck', 'broken_phone'],
     palette: {
       sky: '#B9B0CF',
@@ -190,7 +322,7 @@ export const ZONES: Record<
     baseRewards: { food: 85, scrap: 65, shinies: 3 },
     rareChance: 0.3,
     risk: 'High',
-    unlockCost: { food: 180, scrap: 220, shinies: 8 },
+    unlockCost: { food: 240, scrap: 300, shinies: 10 },
     loot: ['snack_bag', 'keychain', 'donut', 'watch', 'gold_ring', 'glowing_bottle_cap'],
     palette: {
       sky: '#4E6286',

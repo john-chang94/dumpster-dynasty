@@ -19,6 +19,8 @@ import {
   StatLine,
 } from '@/components/game/ui';
 import {
+  ACTIVE_ENCOUNTER_CHOICES,
+  ActiveEncounterChoiceId,
   formatDuration,
   hasResources,
   RACCOON_CLASSES,
@@ -31,6 +33,7 @@ import {
 } from '@/constants/game';
 import {
   getAvailableRaccoons,
+  getEncounterChoiceChance,
   getRunForZone,
   getRunRemainingSeconds,
   isRunReady,
@@ -43,7 +46,7 @@ type ScavengeView = 'map' | 'active';
 
 export default function ScavengeScreen() {
   const now = useRunClock();
-  const { state, startRun, claimRun, unlockZone } = useGame();
+  const { state, startRun, claimRun, unlockZone, resolveActiveEncounter } = useGame();
   const [view, setView] = useState<ScavengeView>('active');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const activeRun = state.runs.find((run) => run.id === selectedRunId) ?? state.runs[0];
@@ -61,6 +64,7 @@ export default function ScavengeScreen() {
           now={now}
           onMap={() => setView('map')}
           onSelectRun={setSelectedRunId}
+          resolveActiveEncounter={resolveActiveEncounter}
           run={activeRun}
         />
       </SceneScreen>
@@ -232,6 +236,7 @@ function ActiveRunView({
   activeRuns,
   now,
   claimRun,
+  resolveActiveEncounter,
   onMap,
   onSelectRun,
 }: {
@@ -239,6 +244,7 @@ function ActiveRunView({
   activeRuns: ScavengeRun[];
   now: number;
   claimRun: (runId: string) => void;
+  resolveActiveEncounter: (runId: string, choiceId: ActiveEncounterChoiceId) => void;
   onMap: () => void;
   onSelectRun: (runId: string) => void;
 }) {
@@ -282,17 +288,26 @@ function ActiveRunView({
               ))}
             </View>
           ) : null}
+          {!run.encounterResolved ? (
+            <EncounterCard run={run} onResolve={resolveActiveEncounter} />
+          ) : run.encounterResult ? (
+            <EncounterResultCard run={run} />
+          ) : null}
           <Text style={styles.panelKicker}>Loot Run</Text>
           <Text style={styles.panelTitle}>{zone.name}</Text>
           <Text style={styles.bodyText}>{ready ? 'The crew is back with a haul.' : `${raccoon.name} is still scouting the route.`}</Text>
           <ProgressBar value={1 - remainingSeconds / run.durationSec} />
           <View style={styles.rewardPreview}>
             {RESOURCE_KEYS.filter((key) => zone.baseRewards[key] > 0).map((key) => (
-              <ResourceAmount key={key} amount={zone.baseRewards[key]} resourceKey={key} />
+              <ResourceAmount
+                key={key}
+                amount={Math.round(zone.baseRewards[key] * (1 + run.resourceMultiplier))}
+                resourceKey={key}
+              />
             ))}
             <View style={styles.rareBadge}>
               <MaterialCommunityIcons name="star-four-points" size={15} color={gameColors.orangeDark} />
-              <Text style={styles.rareText}>{Math.round(zone.rareChance * 100)}%</Text>
+              <Text style={styles.rareText}>{Math.round(getRunRareChancePreview(run) * 100)}%</Text>
             </View>
           </View>
           <View style={styles.actionRow}>
@@ -309,6 +324,81 @@ function ActiveRunView({
   );
 }
 
+function EncounterCard({
+  run,
+  onResolve,
+}: {
+  run: ScavengeRun;
+  onResolve: (runId: string, choiceId: ActiveEncounterChoiceId) => void;
+}) {
+  const zone = ZONES[run.zoneId];
+  const raccoon = RACCOONS[run.raccoonId];
+
+  return (
+    <View style={styles.encounterCard}>
+      <View style={styles.encounterCopy}>
+        <Text style={styles.panelKicker}>Choice Encounter</Text>
+        <Text style={styles.encounterTitle}>Security Light</Text>
+        <Text style={styles.encounterBody}>
+          {raccoon.name} spotted movement near {zone.name}. Pick one quick choice for this run.
+        </Text>
+      </View>
+      <View style={styles.choiceRow}>
+        {(Object.keys(ACTIVE_ENCOUNTER_CHOICES) as ActiveEncounterChoiceId[]).map((choiceId) => {
+          const choice = ACTIVE_ENCOUNTER_CHOICES[choiceId];
+          const chance = Math.round(getEncounterChoiceChance(choiceId, run.raccoonId) * 100);
+
+          return (
+            <ActionButton
+              icon={getChoiceIcon(choiceId)}
+              key={choiceId}
+              onPress={() => onResolve(run.id, choiceId)}
+              tone={choiceId === 'grab' ? 'primary' : choiceId === 'dash' ? 'plain' : 'secondary'}
+              style={styles.choiceButton}>
+              {choice.label} {chance}%
+            </ActionButton>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function EncounterResultCard({ run }: { run: ScavengeRun }) {
+  const result = run.encounterResult;
+
+  if (!result) {
+    return null;
+  }
+
+  return (
+    <View style={styles.encounterResult}>
+      <MaterialCommunityIcons
+        name={result.success ? 'check-circle' : 'alert-circle'}
+        size={18}
+        color={result.success ? gameColors.greenDark : gameColors.orangeDark}
+      />
+      <View style={styles.encounterResultCopy}>
+        <Text style={styles.encounterResultText}>{result.message}</Text>
+        <View style={styles.resultChipRow}>
+          {result.resourceMultiplierDelta > 0 ? (
+            <Text style={styles.resultChip}>+{Math.round(result.resourceMultiplierDelta * 100)}% haul</Text>
+          ) : null}
+          {result.rareBonusDelta > 0 ? (
+            <Text style={styles.resultChip}>+{Math.round(result.rareBonusDelta * 100)}% rare</Text>
+          ) : null}
+          {result.durationDeltaSec !== 0 ? (
+            <Text style={styles.resultChip}>
+              {result.durationDeltaSec < 0 ? '-' : '+'}
+              {formatDuration(Math.abs(result.durationDeltaSec))}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function getZoneShortName(zoneId: ZoneId) {
   switch (zoneId) {
     case 'alley':
@@ -317,6 +407,25 @@ function getZoneShortName(zoneId: ZoneId) {
       return 'Backlot';
     case 'store':
       return 'Store';
+  }
+}
+
+function getRunRareChancePreview(run: ScavengeRun) {
+  const zone = ZONES[run.zoneId];
+  const raccoon = RACCOONS[run.raccoonId];
+  const classBonus = raccoon.classId === 'sniffer' ? 0.22 : raccoon.classId === 'sneak' ? 0.08 : 0;
+
+  return Math.min(0.95, zone.rareChance + classBonus + run.rareBonus);
+}
+
+function getChoiceIcon(choiceId: ActiveEncounterChoiceId): keyof typeof MaterialCommunityIcons.glyphMap {
+  switch (choiceId) {
+    case 'hide':
+      return 'eye-off';
+    case 'dash':
+      return 'run-fast';
+    case 'grab':
+      return 'package-variant';
   }
 }
 
@@ -502,6 +611,75 @@ const styles = StyleSheet.create({
   },
   activePanel: {
     gap: 9,
+  },
+  encounterCard: {
+    backgroundColor: '#F9E3BA',
+    borderColor: 'rgba(84, 52, 25, 0.22)',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    padding: 8,
+  },
+  encounterCopy: {
+    gap: 3,
+  },
+  encounterTitle: {
+    color: gameColors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  encounterBody: {
+    color: gameColors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 15,
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  choiceButton: {
+    flex: 1,
+    minHeight: 34,
+    paddingHorizontal: 5,
+    paddingVertical: 6,
+  },
+  encounterResult: {
+    alignItems: 'flex-start',
+    backgroundColor: '#F9E3BA',
+    borderColor: 'rgba(84, 52, 25, 0.18)',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    padding: 8,
+  },
+  encounterResultCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  encounterResultText: {
+    color: gameColors.ink,
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 15,
+  },
+  resultChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  resultChip: {
+    backgroundColor: '#FFF7E8',
+    borderColor: 'rgba(84, 52, 25, 0.16)',
+    borderRadius: 7,
+    borderWidth: 1,
+    color: gameColors.greenDark,
+    fontSize: 10,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
   runSwitcher: {
     flexDirection: 'row',
