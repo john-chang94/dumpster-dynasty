@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { GameToastHost } from '@/components/game/ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GameProvider } from '@/state/game-store';
 
@@ -20,6 +21,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Dumpster Notes' }} />
         </Stack>
+        <GameToastHost />
         <StatusBar style="dark" />
       </GameProvider>
     </ThemeProvider>

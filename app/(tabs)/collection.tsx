@@ -8,7 +8,6 @@ import {
   CostRow,
   GameScreen,
   gameColors,
-  MessageBanner,
   ProgressBar,
   ResourceAmount,
   SectionTitle,
@@ -52,8 +51,6 @@ export default function CollectionScreen() {
 
   return (
     <GameScreen title="Collection" subtitle={`${dailyCompleteCount} daily - ${discoveredLootIds.length} loot finds`}>
-      <MessageBanner scope="collection" />
-
       <Card style={styles.tabsCard}>
         <View style={styles.segmented}>
           <SegmentButton active={hubTab === 'quests'} label="Quests" onPress={() => setHubTab('quests')} />

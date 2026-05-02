@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { BuildingArt } from '@/components/game/art';
-import { ActionButton, Card, CostRow, GameScreen, gameColors, MessageBanner, ProgressBar } from '@/components/game/ui';
+import { ActionButton, Card, CostRow, GameScreen, gameColors, ProgressBar } from '@/components/game/ui';
 import { BUILDINGS, BuildingId, getBuildingStage, getBuildingUpgradeCost, hasResources } from '@/constants/game';
 import { useGame } from '@/state/game-store';
 
@@ -10,8 +10,6 @@ export default function BuildScreen() {
 
   return (
     <GameScreen title="Build & Upgrade" subtitle="Upgrade structures to increase crew capacity, storage, and run output.">
-      <MessageBanner scope="build" />
-
       {(Object.keys(BUILDINGS) as BuildingId[]).map((buildingId) => {
         const building = BUILDINGS[buildingId];
         const level = state.buildings[buildingId].level;

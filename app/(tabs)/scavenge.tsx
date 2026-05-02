@@ -1,5 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useState } from 'react';
+import { useNavigation } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { environmentSources } from '@/components/game/asset-sources';
@@ -10,7 +11,6 @@ import {
   CostRow,
   GameScreen,
   gameColors,
-  MessageBanner,
   OverlayPanel,
   ProgressBar,
   ResourceAmount,
@@ -44,19 +44,40 @@ import {
 
 type ScavengeView = 'map' | 'active';
 
+const DEFAULT_TAB_BAR_STYLE = {
+  backgroundColor: '#3B2614',
+  borderTopColor: '#6A4321',
+  minHeight: 62,
+  paddingBottom: 8,
+  paddingTop: 6,
+};
+
 export default function ScavengeScreen() {
   const now = useRunClock();
+  const navigation = useNavigation();
   const { state, startRun, claimRun, unlockZone, resolveActiveEncounter } = useGame();
   const [view, setView] = useState<ScavengeView>('active');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const activeRun = state.runs.find((run) => run.id === selectedRunId) ?? state.runs[0];
   const availableRaccoons = getAvailableRaccoons(state);
+  const hideTabBar = Boolean(activeRun && view === 'active');
+
+  useEffect(() => {
+    navigation.setOptions({
+      tabBarStyle: hideTabBar ? { display: 'none' } : DEFAULT_TAB_BAR_STYLE,
+    });
+
+    return () => {
+      navigation.setOptions({ tabBarStyle: DEFAULT_TAB_BAR_STYLE });
+    };
+  }, [hideTabBar, navigation]);
 
   if (activeRun && view === 'active') {
     return (
       <SceneScreen
         background={environmentSources[activeRun.zoneId]}
-        title="Active Scavenge"
+        compactHud
+        title="Active Run"
         subtitle={`${state.runs.length} ${state.runs.length === 1 ? 'run' : 'runs'} underway`}>
         <ActiveRunView
           activeRuns={state.runs}
@@ -78,8 +99,6 @@ export default function ScavengeScreen() {
 
   return (
     <GameScreen title="Scavenge Map" subtitle="Pick a route, assign an available raccoon, then return for the haul.">
-      <MessageBanner scope="scavenge" />
-
       <Card style={styles.summaryCard}>
         <SectionTitle
           title="Assignment"
@@ -293,30 +312,36 @@ function ActiveRunView({
           ) : run.encounterResult ? (
             <EncounterResultCard run={run} />
           ) : null}
-          <Text style={styles.panelKicker}>Loot Run</Text>
-          <Text style={styles.panelTitle}>{zone.name}</Text>
-          <Text style={styles.bodyText}>{ready ? 'The crew is back with a haul.' : `${raccoon.name} is still scouting the route.`}</Text>
-          <ProgressBar value={1 - remainingSeconds / run.durationSec} />
-          <View style={styles.rewardPreview}>
-            {RESOURCE_KEYS.filter((key) => zone.baseRewards[key] > 0).map((key) => (
-              <ResourceAmount
-                key={key}
-                amount={Math.round(zone.baseRewards[key] * (1 + run.resourceMultiplier))}
-                resourceKey={key}
-              />
-            ))}
-            <View style={styles.rareBadge}>
-              <MaterialCommunityIcons name="star-four-points" size={15} color={gameColors.orangeDark} />
-              <Text style={styles.rareText}>{Math.round(getRunRareChancePreview(run) * 100)}%</Text>
+          <View style={styles.compactRunHeader}>
+            <View style={styles.compactRunCopy}>
+              <Text style={styles.panelKicker}>Loot Run</Text>
+              <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={styles.panelTitle}>{zone.name}</Text>
             </View>
+            <Text style={styles.statusPill}>{ready ? 'Ready' : formatDuration(remainingSeconds)}</Text>
           </View>
-          <View style={styles.actionRow}>
-            <ActionButton disabled={!ready} icon="package-variant" onPress={() => claimRun(run.id)} style={styles.primaryAction}>
-              {ready ? 'Claim Haul' : 'Scavenging'}
-            </ActionButton>
-            <ActionButton icon="map" tone="plain" onPress={onMap} style={styles.secondaryAction}>
-              Map
-            </ActionButton>
+          <ProgressBar value={1 - remainingSeconds / run.durationSec} />
+          <View style={styles.compactRunFooter}>
+            <View style={styles.rewardPreview}>
+              {RESOURCE_KEYS.filter((key) => zone.baseRewards[key] > 0).map((key) => (
+                <ResourceAmount
+                  key={key}
+                  amount={Math.round(zone.baseRewards[key] * (1 + run.resourceMultiplier))}
+                  resourceKey={key}
+                />
+              ))}
+              <View style={styles.rareBadge}>
+                <MaterialCommunityIcons name="star-four-points" size={15} color={gameColors.orangeDark} />
+                <Text style={styles.rareText}>{Math.round(getRunRareChancePreview(run) * 100)}%</Text>
+              </View>
+            </View>
+            <View style={styles.actionRow}>
+              <ActionButton disabled={!ready} icon="package-variant" onPress={() => claimRun(run.id)} style={styles.primaryAction}>
+                {ready ? 'Claim' : 'Scavenging'}
+              </ActionButton>
+              <ActionButton icon="map" tone="plain" onPress={onMap} style={styles.secondaryAction}>
+                Map
+              </ActionButton>
+            </View>
           </View>
         </OverlayPanel>
       </View>
@@ -340,7 +365,7 @@ function EncounterCard({
         <Text style={styles.panelKicker}>Choice Encounter</Text>
         <Text style={styles.encounterTitle}>Security Light</Text>
         <Text style={styles.encounterBody}>
-          {raccoon.name} spotted movement near {zone.name}. Pick one quick choice for this run.
+          {raccoon.name} spotted movement near {zone.name}. Pick a response.
         </Text>
       </View>
       <View style={styles.choiceRow}>
@@ -349,18 +374,49 @@ function EncounterCard({
           const chance = Math.round(getEncounterChoiceChance(choiceId, run.raccoonId) * 100);
 
           return (
-            <ActionButton
-              icon={getChoiceIcon(choiceId)}
+            <EncounterChoiceButton
+              choiceId={choiceId}
+              chance={chance}
               key={choiceId}
+              label={choice.label}
               onPress={() => onResolve(run.id, choiceId)}
-              tone={choiceId === 'grab' ? 'primary' : choiceId === 'dash' ? 'plain' : 'secondary'}
-              style={styles.choiceButton}>
-              {choice.label} {chance}%
-            </ActionButton>
+            />
           );
         })}
       </View>
     </View>
+  );
+}
+
+function EncounterChoiceButton({
+  choiceId,
+  chance,
+  label,
+  onPress,
+}: {
+  choiceId: ActiveEncounterChoiceId;
+  chance: number;
+  label: string;
+  onPress: () => void;
+}) {
+  const activeStyle =
+    choiceId === 'grab' ? styles.choiceButtonGrab : choiceId === 'hide' ? styles.choiceButtonHide : styles.choiceButtonDash;
+  const activeTextStyle = choiceId === 'dash' ? styles.choiceButtonTextPlain : styles.choiceButtonTextFilled;
+  const iconColor = choiceId === 'dash' ? gameColors.muted : '#FFF9E9';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.choiceButton, activeStyle, pressed && styles.choiceButtonPressed]}>
+      <MaterialCommunityIcons name={getChoiceIcon(choiceId)} size={17} color={iconColor} />
+      <View style={styles.choiceButtonCopy}>
+        <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.choiceButtonLabel, activeTextStyle]}>
+          {label}
+        </Text>
+        <Text style={[styles.choiceButtonChance, activeTextStyle]}>{chance}%</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -597,52 +653,95 @@ const styles = StyleSheet.create({
   },
   activeRaccoon: {
     alignItems: 'center',
-    bottom: 250,
+    bottom: 270,
     left: 0,
     position: 'absolute',
     right: 0,
   },
   bottomStack: {
-    bottom: 12,
+    bottom: 10,
     gap: 8,
     left: 0,
     position: 'absolute',
     right: 0,
   },
   activePanel: {
-    gap: 9,
+    gap: 7,
+    padding: 10,
   },
   encounterCard: {
     backgroundColor: '#F9E3BA',
     borderColor: 'rgba(84, 52, 25, 0.22)',
     borderRadius: 8,
     borderWidth: 1,
-    gap: 8,
-    padding: 8,
+    gap: 6,
+    padding: 7,
   },
   encounterCopy: {
-    gap: 3,
+    gap: 2,
   },
   encounterTitle: {
     color: gameColors.ink,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
   },
   encounterBody: {
     color: gameColors.muted,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
-    lineHeight: 15,
+    lineHeight: 13,
   },
   choiceRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 7,
   },
   choiceButton: {
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
     flex: 1,
-    minHeight: 34,
-    paddingHorizontal: 5,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    gap: 5,
+    justifyContent: 'center',
+    minHeight: 39,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+  },
+  choiceButtonHide: {
+    backgroundColor: gameColors.green,
+    borderColor: gameColors.greenDark,
+  },
+  choiceButtonDash: {
+    backgroundColor: '#F8E3B8',
+    borderColor: 'rgba(84, 52, 25, 0.25)',
+  },
+  choiceButtonGrab: {
+    backgroundColor: gameColors.orange,
+    borderColor: gameColors.orangeDark,
+  },
+  choiceButtonPressed: {
+    opacity: 0.78,
+    transform: [{ translateY: 1 }],
+  },
+  choiceButtonCopy: {
+    alignItems: 'flex-start',
+    flex: 1,
+    minWidth: 0,
+  },
+  choiceButtonLabel: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  choiceButtonChance: {
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12,
+  },
+  choiceButtonTextFilled: {
+    color: '#FFF9E9',
+  },
+  choiceButtonTextPlain: {
+    color: gameColors.ink,
   },
   encounterResult: {
     alignItems: 'flex-start',
@@ -708,15 +807,40 @@ const styles = StyleSheet.create({
   runSwitchTextActive: {
     color: '#FFF9E9',
   },
+  compactRunHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  compactRunCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  statusPill: {
+    backgroundColor: '#F8E3B8',
+    borderColor: 'rgba(84, 52, 25, 0.2)',
+    borderRadius: 8,
+    borderWidth: 1,
+    color: gameColors.ink,
+    fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  compactRunFooter: {
+    gap: 7,
+  },
   panelKicker: {
     color: gameColors.greenDark,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   panelTitle: {
     color: gameColors.ink,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
   },
   rareBadge: {
@@ -737,12 +861,16 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 7,
   },
   primaryAction: {
     flex: 1,
+    minHeight: 36,
+    paddingVertical: 7,
   },
   secondaryAction: {
+    minHeight: 36,
     minWidth: 88,
+    paddingVertical: 7,
   },
 });

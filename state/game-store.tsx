@@ -90,6 +90,7 @@ type GameAction =
   | { type: 'claimMilestoneReward'; milestoneId: MilestoneId; now: number }
   | { type: 'resolveActiveEncounter'; runId: string; choiceId: ActiveEncounterChoiceId; now: number }
   | { type: 'dismissOfflineSummary'; now: number }
+  | { type: 'resetLocalSave'; now: number }
   | { type: 'clearMessage' };
 
 type GameContextValue = {
@@ -106,6 +107,7 @@ type GameContextValue = {
   claimMilestoneReward: (milestoneId: MilestoneId) => void;
   resolveActiveEncounter: (runId: string, choiceId: ActiveEncounterChoiceId) => void;
   dismissOfflineSummary: () => void;
+  resetLocalSave: () => void;
   clearMessage: () => void;
 };
 
@@ -190,6 +192,16 @@ export function GameProvider({ children }: PropsWithChildren) {
       resolveActiveEncounter: (runId, choiceId) =>
         dispatch({ type: 'resolveActiveEncounter', runId, choiceId, now: Date.now() }),
       dismissOfflineSummary: () => dispatch({ type: 'dismissOfflineSummary', now: Date.now() }),
+      resetLocalSave: () => {
+        const now = Date.now();
+
+        AsyncStorage.removeItem(SAVE_KEY).finally(() =>
+          dispatch({
+            type: 'resetLocalSave',
+            now,
+          }),
+        );
+      },
       clearMessage: () => dispatch({ type: 'clearMessage' }),
     }),
     [loaded, state],
@@ -330,15 +342,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         lastMessageScope: 'base',
       }, 'collect_scrap', state.pendingOfflineRewards.scrap);
     case 'tapLootPile': {
-      const shinies = Math.random() < 0.16 ? 1 : 0;
-      const reward = { food: 12, scrap: 9, shinies };
+      const shinies = Math.random() < 0.05 ? 1 : 0;
+      const reward = { food: 3, scrap: 3, shinies };
 
       return incrementQuestProgress({
         ...state,
         resources: addResources(state.resources, reward),
         discoveredLoot: maybeDiscoverLoot(state.discoveredLoot, ['pizza_crust', 'soda_can'], 0.35),
         lastSeenAt: action.now,
-        lastMessage: shinies > 0 ? 'Loot pile had a shiny tucked under it.' : 'Loot pile sorted.',
+        lastMessage: shinies > 0 ? 'Quick sort found +3 food, +3 scrap, and 1 shiny.' : 'Quick sort added +3 food and +3 scrap.',
         lastMessageScope: 'base',
       }, 'collect_scrap', reward.scrap);
     }
@@ -560,6 +572,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         offlineSummary: undefined,
         lastSeenAt: action.now,
+      };
+    case 'resetLocalSave':
+      return {
+        ...createInitialState(action.now),
+        lastMessage: 'Local save reset for testing.',
+        lastMessageScope: 'base',
       };
     case 'clearMessage':
       return {
@@ -882,11 +900,11 @@ function resolveEncounterChoice(
 
   if (success) {
     resourceMultiplierDelta = choice.rewardMultiplier;
-    rareBonusDelta = choice.rareBonus + (raccoon.classId === 'sniffer' ? 0.08 : 0);
+    rareBonusDelta = choice.rareBonus + (raccoon.classId === 'sniffer' ? 0.06 : 0);
     durationDeltaSec = choice.durationReductionPct > 0 ? -Math.round(run.durationSec * choice.durationReductionPct) : 0;
     immediateReward = createResourceBundle(
       raccoon.classId === 'hauler' && choiceId === 'grab'
-        ? addResources(createResourceBundle(choice.immediateReward), { scrap: 8 })
+        ? addResources(createResourceBundle(choice.immediateReward), { scrap: 5 })
         : choice.immediateReward,
     );
   } else if (choiceId === 'grab') {
@@ -945,9 +963,9 @@ function calculateOfflineRewards(state: GameState, now: number): ResourceBundle 
   const vaultLevel = state.buildings.vault.level;
 
   return createResourceBundle({
-    food: cappedHours * (18 + nestLevel * 4 + snackLevel * 9),
-    scrap: cappedHours * (16 + sortLevel * 10),
-    shinies: cappedHours * Math.max(0.25, (vaultLevel - 1) * 0.45),
+    food: cappedHours * (8 + nestLevel * 2 + snackLevel * 4),
+    scrap: cappedHours * (7 + sortLevel * 5),
+    shinies: cappedHours * Math.max(0.12, (vaultLevel - 1) * 0.32),
   });
 }
 
@@ -974,9 +992,9 @@ function rollRunReward(state: GameState, run: ScavengeRun) {
       variance *
       encounterBonus,
   });
-  const classRareBonus = raccoon.classId === 'sniffer' ? 0.22 : raccoon.classId === 'sneak' ? 0.08 : 0;
+  const classRareBonus = raccoon.classId === 'sniffer' ? 0.16 : raccoon.classId === 'sneak' ? 0.05 : 0;
   const rareChance = clampNumber(
-    zone.rareChance + classRareBonus + run.rareBonus + (state.buildings.vault.level - 1) * 0.025,
+    zone.rareChance + classRareBonus + run.rareBonus + (state.buildings.vault.level - 1) * 0.018,
     0,
     0.95,
   );

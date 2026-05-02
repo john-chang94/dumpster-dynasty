@@ -1,8 +1,18 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { Image } from "expo-image";
-import { PropsWithChildren, ReactNode } from "react";
+import { useRouter } from "expo-router";
+import {
+  PropsWithChildren,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Modal,
   Pressable,
   ScrollView,
   StyleProp,
@@ -48,6 +58,7 @@ type SceneScreenProps = PropsWithChildren<{
   title: string;
   subtitle?: string;
   rightAction?: ReactNode;
+  compactHud?: boolean;
 }>;
 
 type GameScreenProps = PropsWithChildren<{
@@ -100,9 +111,11 @@ export function SceneScreen({
   title,
   subtitle,
   rightAction,
+  compactHud = false,
   children,
 }: SceneScreenProps) {
   const { loaded } = useGame();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <View style={styles.sceneScreen}>
@@ -114,8 +127,13 @@ export function SceneScreen({
       />
       <View style={styles.sceneShade} />
       <SafeAreaView edges={["top"]} style={styles.sceneSafe}>
-        <View style={styles.sceneHud}>
-          <View style={styles.sceneTitlePill}>
+        <View style={[styles.sceneHud, compactHud && styles.sceneHudCompact]}>
+          <View
+            style={[
+              styles.sceneTitlePill,
+              compactHud && styles.sceneTitlePillCompact,
+            ]}
+          >
             <Text style={styles.sceneTitle}>{title}</Text>
             {subtitle ? (
               <Text style={styles.sceneSubtitle}>{subtitle}</Text>
@@ -126,12 +144,12 @@ export function SceneScreen({
               <IconButton
                 accessibilityLabel="Settings"
                 icon="cog"
-                onPress={() => undefined}
+                onPress={() => setSettingsOpen(true)}
               />
             )}
           </View>
         </View>
-        <ResourceBar compact />
+        {compactHud ? null : <ResourceBar compact />}
         {!loaded ? (
           <View style={styles.sceneLoadingState}>
             <ActivityIndicator color="#FFF9E9" />
@@ -141,6 +159,10 @@ export function SceneScreen({
           <View style={styles.sceneContent}>{children}</View>
         )}
       </SafeAreaView>
+      <SettingsMenu
+        onClose={() => setSettingsOpen(false)}
+        visible={settingsOpen}
+      />
     </View>
   );
 }
@@ -235,23 +257,142 @@ export function ResourceAmount({
   );
 }
 
-export function MessageBanner({ scope }: { scope: MessageScope }) {
-  const { state, clearMessage } = useGame();
+export function MessageBanner({ scope: _scope }: { scope: MessageScope }) {
+  return null;
+}
 
-  if (!state.lastMessage || state.lastMessageScope !== scope) {
+export function GameToastHost() {
+  return (
+    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      <SafeAreaView
+        edges={["top"]}
+        pointerEvents="box-none"
+        style={styles.toastSafeArea}
+      >
+        <MessageToast />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+function MessageToast() {
+  const router = useRouter();
+  const { state, clearMessage } = useGame();
+  const translateY = useRef(new Animated.Value(-86)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const visibleScopeRef = useRef<MessageScope | undefined>(undefined);
+  const [visibleMessage, setVisibleMessage] = useState<string | undefined>();
+  const activeMessage = state.lastMessage;
+
+  const dismissToast = useCallback(
+    (redirect = false) => {
+      Animated.parallel([
+        Animated.timing(translateY, {
+          toValue: -86,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) {
+          const targetScope = visibleScopeRef.current;
+          setVisibleMessage(undefined);
+          visibleScopeRef.current = undefined;
+          clearMessage();
+          if (redirect && targetScope) {
+            router.navigate(getRouteForMessageScope(targetScope));
+          }
+        }
+      });
+    },
+    [clearMessage, opacity, router, translateY],
+  );
+
+  useEffect(() => {
+    if (!activeMessage) {
+      return;
+    }
+
+    setVisibleMessage(activeMessage);
+    visibleScopeRef.current = state.lastMessageScope;
+    translateY.setValue(-86);
+    opacity.setValue(0);
+
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: 0,
+        damping: 18,
+        mass: 0.8,
+        stiffness: 180,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const timeout = setTimeout(dismissToast, 5000);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [
+    activeMessage,
+    dismissToast,
+    opacity,
+    state.lastMessageScope,
+    translateY,
+  ]);
+
+  if (!visibleMessage) {
     return null;
   }
 
   return (
-    <Pressable onPress={clearMessage} style={styles.messageBanner}>
-      <MaterialCommunityIcons
-        name="paw"
-        size={18}
-        color={gameColors.orangeDark}
-      />
-      <Text style={styles.messageText}>{state.lastMessage}</Text>
-    </Pressable>
+    <Animated.View
+      pointerEvents="box-none"
+      style={[
+        styles.toastHost,
+        {
+          opacity,
+          transform: [{ translateY }],
+        },
+      ]}
+    >
+      <Pressable
+        onPress={() => dismissToast(true)}
+        style={styles.messageBanner}
+      >
+        <MaterialCommunityIcons
+          name="paw"
+          size={18}
+          color={gameColors.orangeDark}
+        />
+        <Text style={styles.messageText}>{visibleMessage}</Text>
+      </Pressable>
+    </Animated.View>
   );
+}
+
+function getRouteForMessageScope(scope: MessageScope) {
+  switch (scope) {
+    case "base":
+      return "/";
+    case "build":
+      return "/build";
+    case "collection":
+      return "/collection";
+    case "scavenge":
+      return "/scavenge";
+    case "shop":
+      return "/shop";
+  }
 }
 
 type CardProps = PropsWithChildren<{
@@ -334,6 +475,72 @@ export function ActionButton({
         {children}
       </Text>
     </Pressable>
+  );
+}
+
+function SettingsMenu({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const { resetLocalSave } = useGame();
+
+  const handleReset = () => {
+    onClose();
+    resetLocalSave();
+    router.replace("/");
+  };
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={visible}
+    >
+      <View style={styles.settingsBackdrop}>
+        <View style={styles.settingsPanel}>
+          <View style={styles.settingsHeader}>
+            <View style={styles.settingsTitleBlock}>
+              <Text style={styles.settingsTitle}>Settings</Text>
+              <Text style={styles.settingsSubtitle}>Testing tools</Text>
+            </View>
+            <IconButton
+              accessibilityLabel="Close settings"
+              icon="close"
+              onPress={onClose}
+            />
+          </View>
+
+          <Text style={styles.settingsBody}>
+            Reset clears this device save and starts the prototype from the
+            beginning.
+          </Text>
+
+          <View style={styles.settingsActions}>
+            <ActionButton
+              icon="trash-can-outline"
+              onPress={handleReset}
+              style={styles.settingsAction}
+              tone="danger"
+            >
+              Reset Save
+            </ActionButton>
+            <ActionButton
+              icon="close"
+              onPress={onClose}
+              style={styles.settingsAction}
+              tone="plain"
+            >
+              Close
+            </ActionButton>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -438,6 +645,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 6,
   },
+  sceneHudCompact: {
+    paddingTop: 4,
+  },
   sceneTitlePill: {
     backgroundColor: "rgba(255, 244, 220, 0.92)",
     borderColor: "rgba(84, 52, 25, 0.3)",
@@ -446,6 +656,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 11,
     paddingVertical: 6,
+  },
+  sceneTitlePillCompact: {
+    flex: 0,
+    minWidth: 170,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   sceneTitle: {
     color: gameColors.ink,
@@ -539,7 +755,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     gap: 14,
-    paddingBottom: 0,
+    paddingBottom: 10,
     paddingHorizontal: 16,
   },
   fixedContent: {
@@ -566,14 +782,79 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 7,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 10,
+  },
+  toastHost: {
+    left: 16,
+    position: "absolute",
+    right: 16,
+    top: 60,
+    zIndex: 50,
+  },
+  toastSafeArea: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 50,
   },
   messageText: {
     color: gameColors.ink,
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
     lineHeight: 16,
+  },
+  settingsBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(31, 19, 9, 0.45)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 18,
+  },
+  settingsPanel: {
+    backgroundColor: gameColors.panel,
+    borderColor: "rgba(84, 52, 25, 0.34)",
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 14,
+    padding: 14,
+    shadowColor: "#2D2118",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    width: "100%",
+  },
+  settingsHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  settingsTitleBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  settingsTitle: {
+    color: gameColors.ink,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  settingsSubtitle: {
+    color: gameColors.greenDark,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  settingsBody: {
+    color: gameColors.muted,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  settingsActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  settingsAction: {
+    flex: 1,
   },
   card: {
     backgroundColor: gameColors.panel,

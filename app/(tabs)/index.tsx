@@ -7,7 +7,6 @@ import { BuildingArt, RaccoonArt } from '@/components/game/art';
 import {
   ActionButton,
   gameColors,
-  MessageBanner,
   OverlayPanel,
   ProgressBar,
   ResourceAmount,
@@ -63,7 +62,10 @@ export default function BaseScreen() {
   })();
 
   return (
-    <SceneScreen background={environmentSources.baseDay} title="Home Base" subtitle={`Crew ${getRecruitCount(state.raccoons)} / 4`}>
+    <SceneScreen
+      background={environmentSources.baseDay}
+      title="Home Base"
+      subtitle={`Crew ${getRecruitCount(state.raccoons)} / 4`}>
       <View style={styles.sceneLayer}>
         {baseBuildingPositions.map(({ id, left, top, size }) => (
           <Pressable
@@ -84,7 +86,6 @@ export default function BaseScreen() {
       </View>
 
       <View style={styles.bottomStack}>
-        <MessageBanner scope="base" />
         {pendingOfflineTotal > 0 ? (
           <OverlayPanel style={styles.offlinePanel}>
             <View style={styles.panelCopy}>
@@ -131,12 +132,17 @@ export default function BaseScreen() {
             </View>
           ) : null}
 
+          <View style={styles.quickSortHint}>
+            <MaterialCommunityIcons name="basket-fill" size={14} color={gameColors.greenDark} />
+            <Text style={styles.quickSortHintText}>Quick Sort gives a small +3 food / +3 scrap tap bonus.</Text>
+          </View>
+
           <View style={styles.actionRow}>
             <ActionButton icon="magnify" onPress={() => router.push('/scavenge')} style={styles.primaryAction}>
               Start Loot Run
             </ActionButton>
             <ActionButton icon="basket-fill" tone="secondary" onPress={tapLootPile} style={styles.secondaryAction}>
-              Sort
+              Quick Sort
             </ActionButton>
           </View>
         </OverlayPanel>
@@ -265,6 +271,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  quickSortHint: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+  },
+  quickSortHintText: {
+    color: gameColors.muted,
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 13,
+  },
   primaryAction: {
     flex: 1,
     minHeight: 38,
@@ -272,7 +290,8 @@ const styles = StyleSheet.create({
   },
   secondaryAction: {
     minHeight: 38,
-    minWidth: 92,
+    minWidth: 112,
+    paddingHorizontal: 9,
     paddingVertical: 8,
   },
   claimButton: {
