@@ -10,7 +10,15 @@ import {
 
 export type AssetSource = number;
 export type TabKey = "base" | "scavenge" | "build" | "collection" | "shop";
-export type RaccoonAnimationId = "idle" | "walk" | "tap" | "celebrate" | "fail";
+export type RaccoonAnimationId =
+  | "idle"
+  | "walk"
+  | "tap"
+  | "celebrate"
+  | "fail"
+  | "carry"
+  | "search"
+  | "grab";
 
 export const resourceIconSources: Record<ResourceKey, AssetSource> = {
   food: require("../../assets/sliced/resources/resource_icon_food.png"),
@@ -80,10 +88,31 @@ const raccoonAnimationSources: Record<
       require("../../assets/sliced/classes/scout/raccoon_scout_walk_05.png"),
       require("../../assets/sliced/classes/scout/raccoon_scout_walk_06.png"),
     ],
+    carry: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_02.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_03.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_04.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_05.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_06.png"),
+    ],
     tap: [
       require("../../assets/sliced/classes/scout/raccoon_scout_tap_01.png"),
       require("../../assets/sliced/classes/scout/raccoon_scout_tap_02.png"),
       require("../../assets/sliced/classes/scout/raccoon_scout_tap_03.png"),
+    ],
+    search: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_tap_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_tap_02.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_tap_03.png"),
+    ],
+    grab: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_02.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_03.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_04.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_05.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_carry_06.png"),
     ],
     celebrate: [
       require("../../assets/sliced/classes/scout/raccoon_scout_celebrate_01.png"),
@@ -109,10 +138,31 @@ const raccoonAnimationSources: Record<
       require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_05.png"),
       require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_06.png"),
     ],
+    carry: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_02.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_03.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_04.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_05.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_06.png"),
+    ],
     tap: [
       require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_01.png"),
       require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_02.png"),
       require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_03.png"),
+    ],
+    search: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_02.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_03.png"),
+    ],
+    grab: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_02.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_03.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_04.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_05.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_carry_06.png"),
     ],
     celebrate: [
       require("../../assets/sliced/classes/hauler/raccoon_hauler_celebrate_01.png"),
@@ -136,7 +186,23 @@ const raccoonAnimationSources: Record<
       require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_03.png"),
       require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_04.png"),
     ],
+    carry: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_02.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_03.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_04.png"),
+    ],
     tap: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_02.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_03.png"),
+    ],
+    search: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_search_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_search_02.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_search_03.png"),
+    ],
+    grab: [
       require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_01.png"),
       require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_02.png"),
       require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_03.png"),
@@ -164,10 +230,29 @@ const raccoonAnimationSources: Record<
       require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_04.png"),
       require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_05.png"),
     ],
+    carry: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_02.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_03.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_04.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_05.png"),
+    ],
     tap: [
       require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_01.png"),
       require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_02.png"),
       require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_03.png"),
+    ],
+    search: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_02.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_03.png"),
+    ],
+    grab: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_grab_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_grab_02.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_grab_03.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_grab_04.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_grab_05.png"),
     ],
     celebrate: [
       require("../../assets/sliced/classes/sneaker/raccoon_sneaker_celebrate_01.png"),
@@ -268,6 +353,17 @@ export function getRaccoonAnimationSources(
   animation: RaccoonAnimationId,
 ): AssetSource[] {
   return raccoonAnimationSources[raccoonId][animation] ?? raccoonAnimationSources[raccoonId].idle;
+}
+
+export function getRaccoonAnimationFrameSource(
+  raccoonId: RaccoonId,
+  animation: RaccoonAnimationId,
+  frameIndex: number,
+): AssetSource {
+  const frames = getRaccoonAnimationSources(raccoonId, animation);
+  const safeIndex = Math.max(0, Math.min(frames.length - 1, frameIndex));
+
+  return frames[safeIndex] ?? getRaccoonSource(raccoonId);
 }
 
 export function getZoneEnvironmentSource(zoneId: ZoneId): AssetSource {

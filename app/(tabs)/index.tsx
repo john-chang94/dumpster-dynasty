@@ -1,9 +1,10 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getBaseThemeSource } from '@/components/game/asset-sources';
-import { AnimatedRaccoonArt, BuildingArt, RaccoonArt } from '@/components/game/art';
+import { getBaseThemeSource, RaccoonAnimationId } from '@/components/game/asset-sources';
+import { AnimatedRaccoonArt, BuildingArt, RaccoonAnimationFrameArt, RaccoonArt } from '@/components/game/art';
 import {
   ActionButton,
   gameColors,
@@ -46,12 +47,57 @@ const baseRaccoonPositions: {
   right?: `${number}%`;
   top: `${number}%`;
   size: number;
-  animation: 'idle' | 'walk' | 'tap';
+  route: {
+    dx: number;
+    dy: number;
+    moveAnimation: 'walk' | 'carry';
+  }[];
 }[] = [
-  { id: 'scout', left: '17%', top: '63%', size: 76, animation: 'idle' },
-  { id: 'hauler', right: '17%', top: '64%', size: 70, animation: 'walk' },
-  { id: 'sniffer', left: '45%', top: '58%', size: 66, animation: 'tap' },
-  { id: 'sneak', right: '36%', top: '72%', size: 58, animation: 'idle' },
+  {
+    id: 'scout',
+    left: '13%',
+    top: '76%',
+    size: 70,
+    route: [
+      { dx: 34, dy: 10, moveAnimation: 'walk' },
+      { dx: -16, dy: -8, moveAnimation: 'walk' },
+      { dx: 0, dy: 0, moveAnimation: 'walk' },
+    ],
+  },
+  {
+    id: 'hauler',
+    right: '8%',
+    top: '74%',
+    size: 64,
+    route: [
+      { dx: -72, dy: -6, moveAnimation: 'walk' },
+      { dx: 0, dy: 0, moveAnimation: 'carry' },
+      { dx: -18, dy: 12, moveAnimation: 'walk' },
+      { dx: 0, dy: 0, moveAnimation: 'walk' },
+    ],
+  },
+  {
+    id: 'sniffer',
+    left: '35%',
+    top: '82%',
+    size: 58,
+    route: [
+      { dx: 42, dy: -8, moveAnimation: 'walk' },
+      { dx: -34, dy: 6, moveAnimation: 'walk' },
+      { dx: 0, dy: 0, moveAnimation: 'walk' },
+    ],
+  },
+  {
+    id: 'sneak',
+    left: '54%',
+    top: '86%',
+    size: 52,
+    route: [
+      { dx: 20, dy: -6, moveAnimation: 'walk' },
+      { dx: -22, dy: 8, moveAnimation: 'walk' },
+      { dx: 0, dy: 0, moveAnimation: 'walk' },
+    ],
+  },
 ];
 
 export default function BaseScreen() {
@@ -93,7 +139,6 @@ export default function BaseScreen() {
       title="Home Base"
       subtitle={`Crew ${getRecruitCount(state.raccoons)} / 4`}>
       <View style={styles.sceneLayer}>
-        <View style={[styles.sceneGlow, state.selectedBaseThemeId !== 'day' && styles.sceneGlowNight]} />
         <View style={[styles.sparkle, styles.sparkleOne]} />
         <View style={[styles.sparkle, styles.sparkleTwo]} />
         <View style={[styles.sparkle, styles.sparkleThree]} />
@@ -109,10 +154,16 @@ export default function BaseScreen() {
         ))}
         {baseRaccoonPositions
           .filter(({ id }) => id === 'scout' || state.raccoons[id].unlocked)
-          .map(({ id, left, right, top, size, animation }) => (
-            <View key={id} style={[styles.sceneRaccoon, { left, right, top }]}>
-              <AnimatedRaccoonArt animation={animation} intervalMs={id === 'hauler' ? 320 : 520} raccoonId={id} size={size} />
-            </View>
+          .map(({ id, left, right, top, size, route }) => (
+            <HomeBaseRaccoon
+              key={id}
+              left={left}
+              raccoonId={id}
+              route={route}
+              right={right}
+              size={size}
+              top={top}
+            />
           ))}
       </View>
 
@@ -194,6 +245,164 @@ export default function BaseScreen() {
   );
 }
 
+function HomeBaseRaccoon({
+  raccoonId,
+  left,
+  right,
+  top,
+  size,
+  route,
+}: {
+  raccoonId: RaccoonId;
+  left?: `${number}%`;
+  right?: `${number}%`;
+  top: `${number}%`;
+  size: number;
+  route: {
+    dx: number;
+    dy: number;
+    moveAnimation: 'walk' | 'carry';
+  }[];
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+  const currentOffset = useRef({ x: 0, y: 0 });
+  const routeIndex = useRef(0);
+  const tapTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [animation, setAnimation] = useState<RaccoonAnimationId>('idle');
+  const [facing, setFacing] = useState(1);
+  const [tapFrameIndex, setTapFrameIndex] = useState<number | undefined>();
+  const firstDelayMs = useMemo(() => getIdleDelayMs(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    const scheduleNextWander = (delayMs: number) => {
+      timeout = setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+
+        const target = route[routeIndex.current % route.length];
+        const targetOffset = { x: target.dx, y: target.dy };
+        routeIndex.current += 1;
+        setFacing(targetOffset.x >= currentOffset.current.x ? 1 : -1);
+        setAnimation(target.moveAnimation);
+
+        Animated.parallel([
+          Animated.timing(translateX, {
+            duration: getMoveDurationMs(currentOffset.current, target),
+            easing: Easing.inOut(Easing.quad),
+            toValue: targetOffset.x,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateY, {
+            duration: getMoveDurationMs(currentOffset.current, target),
+            easing: Easing.inOut(Easing.quad),
+            toValue: targetOffset.y,
+            useNativeDriver: true,
+          }),
+        ]).start(({ finished }) => {
+          if (!finished || cancelled) {
+            return;
+          }
+
+          currentOffset.current = targetOffset;
+          setAnimation('idle');
+          scheduleNextWander(getIdleDelayMs());
+        });
+      }, delayMs);
+    };
+
+    if (route.length > 0) {
+      scheduleNextWander(firstDelayMs);
+    }
+
+    return () => {
+      cancelled = true;
+
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+
+      if (tapTimeout.current) {
+        clearTimeout(tapTimeout.current);
+      }
+
+      translateX.stopAnimation();
+      translateY.stopAnimation();
+    };
+  }, [firstDelayMs, route, translateX, translateY]);
+
+  const handleRaccoonTap = () => {
+    if (tapTimeout.current) {
+      clearTimeout(tapTimeout.current);
+    }
+
+    setTapFrameIndex(getTapFrameIndex());
+
+    tapTimeout.current = setTimeout(() => {
+      setTapFrameIndex(undefined);
+    }, 2000);
+  };
+
+  return (
+    <Animated.View
+      style={[
+        styles.sceneRaccoon,
+        {
+          left,
+          right,
+          top,
+          transform: [{ translateX }, { translateY }],
+        },
+      ]}>
+      <Pressable
+        accessibilityLabel={`${RACCOONS[raccoonId].name} reaction`}
+        accessibilityRole="button"
+        hitSlop={12}
+        onPress={handleRaccoonTap}
+        style={({ pressed }) => [styles.raccoonButton, pressed && styles.raccoonButtonPressed]}>
+        {tapFrameIndex === undefined ? (
+          <AnimatedRaccoonArt
+            animation={animation}
+            intervalMs={animation === 'idle' ? undefined : 105}
+            raccoonId={raccoonId}
+            size={size}
+            style={{ transform: [{ scaleX: facing }] }}
+          />
+        ) : (
+          <RaccoonAnimationFrameArt
+            animation="tap"
+            frameIndex={tapFrameIndex}
+            raccoonId={raccoonId}
+            size={size}
+            style={{ transform: [{ scaleX: facing }] }}
+          />
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function getMoveDurationMs(
+  current: { x: number; y: number },
+  target: { dx: number; dy: number },
+) {
+  const distance = Math.hypot(target.dx - current.x, target.dy - current.y);
+
+  return Math.max(1700, Math.min(3200, Math.round(distance * 24)));
+}
+
+function getIdleDelayMs() {
+  return 4000 + Math.round(Math.random() * 4000);
+}
+
+function getTapFrameIndex() {
+  return Math.floor(Math.random() * 3);
+}
+
 function ThemeChip({
   themeId,
   active,
@@ -243,18 +452,6 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  sceneGlow: {
-    backgroundColor: 'rgba(255, 213, 128, 0.18)',
-    borderRadius: 8,
-    bottom: 56,
-    left: '11%',
-    position: 'absolute',
-    right: '11%',
-    top: '36%',
-  },
-  sceneGlowNight: {
-    backgroundColor: 'rgba(71, 124, 184, 0.16)',
-  },
   sparkle: {
     backgroundColor: '#FFE59A',
     borderColor: '#B87923',
@@ -297,6 +494,13 @@ const styles = StyleSheet.create({
   },
   sceneRaccoon: {
     position: 'absolute',
+  },
+  raccoonButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  raccoonButtonPressed: {
+    transform: [{ translateY: 1 }],
   },
   bottomStack: {
     bottom: 8,

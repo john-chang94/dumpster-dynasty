@@ -7,6 +7,7 @@ import {
   getBaseThemeSource,
   getBuildingSource,
   getLootSource,
+  getRaccoonAnimationFrameSource,
   getRaccoonAnimationSources,
   getRaccoonSource,
   getZoneEnvironmentSource,
@@ -41,7 +42,7 @@ export function AnimatedRaccoonArt({
   animation = 'idle',
   size = 96,
   locked = false,
-  intervalMs = 420,
+  intervalMs,
   style,
 }: {
   raccoonId: RaccoonId;
@@ -51,6 +52,7 @@ export function AnimatedRaccoonArt({
   intervalMs?: number;
   style?: StyleProp<ImageStyle>;
 }) {
+  const frameIntervalMs = intervalMs ?? getAnimationFrameInterval(animation);
   const frames = useMemo(
     () => getRaccoonAnimationSources(raccoonId, animation),
     [animation, raccoonId],
@@ -66,11 +68,11 @@ export function AnimatedRaccoonArt({
 
     const timer = setInterval(
       () => setFrameIndex((currentFrame) => (currentFrame + 1) % frames.length),
-      intervalMs,
+      frameIntervalMs,
     );
 
     return () => clearInterval(timer);
-  }, [frames, intervalMs, locked]);
+  }, [frameIntervalMs, frames, locked]);
 
   return (
     <Image
@@ -80,6 +82,52 @@ export function AnimatedRaccoonArt({
       style={[{ height: size, width: size }, style]}
     />
   );
+}
+
+export function RaccoonAnimationFrameArt({
+  raccoonId,
+  animation,
+  frameIndex,
+  size = 96,
+  locked = false,
+  style,
+}: {
+  raccoonId: RaccoonId;
+  animation: RaccoonAnimationId;
+  frameIndex: number;
+  size?: number;
+  locked?: boolean;
+  style?: StyleProp<ImageStyle>;
+}) {
+  return (
+    <Image
+      accessibilityIgnoresInvertColors
+      contentFit="contain"
+      source={
+        locked
+          ? getRaccoonSource(raccoonId, true)
+          : getRaccoonAnimationFrameSource(raccoonId, animation, frameIndex)
+      }
+      style={[{ height: size, width: size }, style]}
+    />
+  );
+}
+
+function getAnimationFrameInterval(animation: RaccoonAnimationId) {
+  switch (animation) {
+    case 'idle':
+      return 560;
+    case 'fail':
+      return 150;
+    case 'tap':
+    case 'celebrate':
+    case 'search':
+    case 'grab':
+      return 115;
+    case 'walk':
+    case 'carry':
+      return 105;
+  }
 }
 
 export function BuildingArt({
