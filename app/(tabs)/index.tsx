@@ -2,8 +2,8 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { environmentSources } from '@/components/game/asset-sources';
-import { BuildingArt, RaccoonArt } from '@/components/game/art';
+import { getBaseThemeSource } from '@/components/game/asset-sources';
+import { AnimatedRaccoonArt, BuildingArt, RaccoonArt } from '@/components/game/art';
 import {
   ActionButton,
   gameColors,
@@ -12,7 +12,18 @@ import {
   ResourceAmount,
   SceneScreen,
 } from '@/components/game/ui';
-import { BuildingId, formatDuration, RACCOONS, RESOURCE_KEYS, ResourceCost, ZONES } from '@/constants/game';
+import { useMusicTrack } from '@/hooks/use-audio-events';
+import {
+  BASE_THEMES,
+  BaseThemeId,
+  BuildingId,
+  formatDuration,
+  RACCOONS,
+  RaccoonId,
+  RESOURCE_KEYS,
+  ResourceCost,
+  ZONES,
+} from '@/constants/game';
 import {
   getResourceTotal,
   getRunRemainingSeconds,
@@ -29,10 +40,25 @@ const baseBuildingPositions: { id: BuildingId; left: `${number}%`; top: `${numbe
   { id: 'training', left: '43%', top: '68%', size: 62 },
 ];
 
+const baseRaccoonPositions: {
+  id: RaccoonId;
+  left?: `${number}%`;
+  right?: `${number}%`;
+  top: `${number}%`;
+  size: number;
+  animation: 'idle' | 'walk' | 'tap';
+}[] = [
+  { id: 'scout', left: '17%', top: '63%', size: 76, animation: 'idle' },
+  { id: 'hauler', right: '17%', top: '64%', size: 70, animation: 'walk' },
+  { id: 'sniffer', left: '45%', top: '58%', size: 66, animation: 'tap' },
+  { id: 'sneak', right: '36%', top: '72%', size: 58, animation: 'idle' },
+];
+
 export default function BaseScreen() {
   const router = useRouter();
+  useMusicTrack('base');
   const now = useRunClock();
-  const { state, claimOfflineRewards, tapLootPile, claimRun } = useGame();
+  const { state, claimOfflineRewards, tapLootPile, claimRun, selectBaseTheme } = useGame();
   const pendingOfflineTotal = getResourceTotal(state.pendingOfflineRewards);
   const offlineSummary = state.offlineSummary;
   const offlineElapsed = offlineSummary ? formatDuration(Math.ceil(offlineSummary.elapsedMs / 1000)) : null;
@@ -63,10 +89,14 @@ export default function BaseScreen() {
 
   return (
     <SceneScreen
-      background={environmentSources.baseDay}
+      background={getBaseThemeSource(state.selectedBaseThemeId)}
       title="Home Base"
       subtitle={`Crew ${getRecruitCount(state.raccoons)} / 4`}>
       <View style={styles.sceneLayer}>
+        <View style={[styles.sceneGlow, state.selectedBaseThemeId !== 'day' && styles.sceneGlowNight]} />
+        <View style={[styles.sparkle, styles.sparkleOne]} />
+        <View style={[styles.sparkle, styles.sparkleTwo]} />
+        <View style={[styles.sparkle, styles.sparkleThree]} />
         {baseBuildingPositions.map(({ id, left, top, size }) => (
           <Pressable
             accessibilityRole="button"
@@ -77,12 +107,13 @@ export default function BaseScreen() {
             <Text style={styles.sceneTag}>Lv {state.buildings[id].level}</Text>
           </Pressable>
         ))}
-        <View style={[styles.sceneRaccoon, styles.sceneRaccoonScout]}>
-          <RaccoonArt raccoonId="scout" size={76} />
-        </View>
-        <View style={[styles.sceneRaccoon, styles.sceneRaccoonHauler]}>
-          <RaccoonArt raccoonId="hauler" size={70} locked={!state.raccoons.hauler.unlocked} />
-        </View>
+        {baseRaccoonPositions
+          .filter(({ id }) => id === 'scout' || state.raccoons[id].unlocked)
+          .map(({ id, left, right, top, size, animation }) => (
+            <View key={id} style={[styles.sceneRaccoon, { left, right, top }]}>
+              <AnimatedRaccoonArt animation={animation} intervalMs={id === 'hauler' ? 320 : 520} raccoonId={id} size={size} />
+            </View>
+          ))}
       </View>
 
       <View style={styles.bottomStack}>
@@ -137,6 +168,18 @@ export default function BaseScreen() {
             <Text style={styles.quickSortHintText}>Quick Sort gives a small +3 food / +3 scrap tap bonus.</Text>
           </View>
 
+          <View style={styles.themeStrip}>
+            <Text style={styles.themeStripLabel}>Base Theme</Text>
+            {state.ownedBaseThemeIds.map((themeId) => (
+              <ThemeChip
+                active={state.selectedBaseThemeId === themeId}
+                key={themeId}
+                onPress={() => selectBaseTheme(themeId)}
+                themeId={themeId}
+              />
+            ))}
+          </View>
+
           <View style={styles.actionRow}>
             <ActionButton icon="magnify" onPress={() => router.push('/scavenge')} style={styles.primaryAction}>
               Start Loot Run
@@ -148,6 +191,33 @@ export default function BaseScreen() {
         </OverlayPanel>
       </View>
     </SceneScreen>
+  );
+}
+
+function ThemeChip({
+  themeId,
+  active,
+  onPress,
+}: {
+  themeId: BaseThemeId;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const theme = BASE_THEMES[themeId];
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.themeChip,
+        active && styles.themeChipActive,
+        { borderColor: theme.accentColor },
+        pressed && styles.themeChipPressed,
+      ]}>
+      <View style={[styles.themeDot, { backgroundColor: theme.accentColor }]} />
+      <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>{theme.label}</Text>
+    </Pressable>
   );
 }
 
@@ -173,6 +243,41 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
+  sceneGlow: {
+    backgroundColor: 'rgba(255, 213, 128, 0.18)',
+    borderRadius: 8,
+    bottom: 56,
+    left: '11%',
+    position: 'absolute',
+    right: '11%',
+    top: '36%',
+  },
+  sceneGlowNight: {
+    backgroundColor: 'rgba(71, 124, 184, 0.16)',
+  },
+  sparkle: {
+    backgroundColor: '#FFE59A',
+    borderColor: '#B87923',
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 8,
+    opacity: 0.78,
+    position: 'absolute',
+    transform: [{ rotate: '45deg' }],
+    width: 8,
+  },
+  sparkleOne: {
+    left: '26%',
+    top: '36%',
+  },
+  sparkleTwo: {
+    right: '28%',
+    top: '47%',
+  },
+  sparkleThree: {
+    left: '54%',
+    top: '70%',
+  },
   sceneBuilding: {
     alignItems: 'center',
     position: 'absolute',
@@ -192,14 +297,6 @@ const styles = StyleSheet.create({
   },
   sceneRaccoon: {
     position: 'absolute',
-  },
-  sceneRaccoonScout: {
-    left: '18%',
-    top: '63%',
-  },
-  sceneRaccoonHauler: {
-    right: '17%',
-    top: '64%',
   },
   bottomStack: {
     bottom: 8,
@@ -282,6 +379,54 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     lineHeight: 13,
+  },
+  themeStrip: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(249, 227, 186, 0.78)',
+    borderColor: 'rgba(84, 52, 25, 0.18)',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    padding: 6,
+  },
+  themeStripLabel: {
+    color: gameColors.greenDark,
+    fontSize: 10,
+    fontWeight: '900',
+    marginRight: 2,
+    textTransform: 'uppercase',
+  },
+  themeChip: {
+    alignItems: 'center',
+    backgroundColor: '#FFF7E8',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 5,
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  themeChipActive: {
+    backgroundColor: '#3B2614',
+  },
+  themeChipPressed: {
+    opacity: 0.78,
+  },
+  themeDot: {
+    borderRadius: 4,
+    height: 8,
+    width: 8,
+  },
+  themeChipText: {
+    color: gameColors.ink,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  themeChipTextActive: {
+    color: '#FFF9E9',
   },
   primaryAction: {
     flex: 1,

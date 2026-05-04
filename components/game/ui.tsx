@@ -17,6 +17,7 @@ import {
   ScrollView,
   StyleProp,
   StyleSheet,
+  Switch,
   Text,
   View,
   ViewStyle,
@@ -29,6 +30,7 @@ import {
 } from "@/components/game/asset-sources";
 import {
   formatResources,
+  RACCOONS,
   RESOURCE_CONFIG,
   RESOURCE_KEYS,
   ResourceBundle,
@@ -50,6 +52,8 @@ export const gameColors = {
   orange: "#D97823",
   orangeDark: "#92420D",
   blue: "#267FAE",
+  purple: "#76509A",
+  gold: "#E8B547",
   shadow: "rgba(69, 42, 18, 0.16)",
 };
 
@@ -486,7 +490,8 @@ function SettingsMenu({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { resetLocalSave } = useGame();
+  const { state, resetLocalSave, updateAudioSettings } = useGame();
+  const recruitedCount = Object.values(state.raccoons).filter((raccoon) => raccoon.unlocked).length;
 
   const handleReset = () => {
     onClose();
@@ -506,7 +511,7 @@ function SettingsMenu({
           <View style={styles.settingsHeader}>
             <View style={styles.settingsTitleBlock}>
               <Text style={styles.settingsTitle}>Settings</Text>
-              <Text style={styles.settingsSubtitle}>Testing tools</Text>
+              <Text style={styles.settingsSubtitle}>Profile, audio, and testing</Text>
             </View>
             <IconButton
               accessibilityLabel="Close settings"
@@ -515,10 +520,50 @@ function SettingsMenu({
             />
           </View>
 
-          <Text style={styles.settingsBody}>
-            Reset clears this device save and starts the prototype from the
-            beginning.
-          </Text>
+          <View style={styles.profileCard}>
+            <View style={styles.profileAvatar}>
+              <MaterialCommunityIcons name="paw" size={22} color="#FFF8E8" />
+            </View>
+            <View style={styles.profileCopy}>
+              <Text style={styles.profileTitle}>Local Raccoon Empire</Text>
+              <Text style={styles.settingsBody}>
+                {recruitedCount} / {Object.keys(RACCOONS).length} crew recruited - {state.totalRunsClaimed} runs claimed
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.settingsGroup}>
+            <Text style={styles.settingsGroupTitle}>Audio</Text>
+            <SettingToggle
+              label="Music"
+              value={state.audioSettings.musicEnabled}
+              onValueChange={(musicEnabled) => updateAudioSettings({ musicEnabled })}
+            />
+            <VolumeStepper
+              disabled={!state.audioSettings.musicEnabled}
+              label="Music volume"
+              value={state.audioSettings.musicVolume}
+              onChange={(musicVolume) => updateAudioSettings({ musicVolume })}
+            />
+            <SettingToggle
+              label="Sound effects"
+              value={state.audioSettings.sfxEnabled}
+              onValueChange={(sfxEnabled) => updateAudioSettings({ sfxEnabled })}
+            />
+            <VolumeStepper
+              disabled={!state.audioSettings.sfxEnabled}
+              label="SFX volume"
+              value={state.audioSettings.sfxVolume}
+              onChange={(sfxVolume) => updateAudioSettings({ sfxVolume })}
+            />
+          </View>
+
+          <View style={styles.settingsGroup}>
+            <Text style={styles.settingsGroupTitle}>Testing</Text>
+            <Text style={styles.settingsBody}>
+              Reset clears this device save and starts the prototype from the beginning.
+            </Text>
+          </View>
 
           <View style={styles.settingsActions}>
             <ActionButton
@@ -541,6 +586,81 @@ function SettingsMenu({
         </View>
       </View>
     </Modal>
+  );
+}
+
+function SettingToggle({
+  label,
+  value,
+  onValueChange,
+}: {
+  label: string;
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+}) {
+  return (
+    <View style={styles.settingRow}>
+      <Text style={styles.settingLabel}>{label}</Text>
+      <Switch
+        ios_backgroundColor="#B7A17E"
+        onValueChange={onValueChange}
+        thumbColor={value ? "#FFF8E8" : "#F1D9B0"}
+        trackColor={{ false: "#B7A17E", true: gameColors.green }}
+        value={value}
+      />
+    </View>
+  );
+}
+
+function VolumeStepper({
+  label,
+  value,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  const percent = Math.round(value * 100);
+
+  return (
+    <View style={[styles.volumeRow, disabled && styles.volumeRowDisabled]}>
+      <Text style={styles.settingLabel}>{label}</Text>
+      <View style={styles.volumeControl}>
+        <Pressable
+          accessibilityLabel={`Lower ${label}`}
+          accessibilityRole="button"
+          disabled={disabled || value <= 0}
+          onPress={() => onChange(Math.max(0, Math.round((value - 0.1) * 10) / 10))}
+          style={({ pressed }) => [
+            styles.volumeButton,
+            pressed && !disabled && styles.pressedButton,
+            (disabled || value <= 0) && styles.disabledButton,
+          ]}
+        >
+          <MaterialCommunityIcons name="minus" size={16} color={gameColors.ink} />
+        </Pressable>
+        <View style={styles.volumeTrack}>
+          <View style={[styles.volumeFill, { width: `${percent}%` }]} />
+        </View>
+        <Text style={styles.volumeValue}>{percent}%</Text>
+        <Pressable
+          accessibilityLabel={`Raise ${label}`}
+          accessibilityRole="button"
+          disabled={disabled || value >= 1}
+          onPress={() => onChange(Math.min(1, Math.round((value + 0.1) * 10) / 10))}
+          style={({ pressed }) => [
+            styles.volumeButton,
+            pressed && !disabled && styles.pressedButton,
+            (disabled || value >= 1) && styles.disabledButton,
+          ]}
+        >
+          <MaterialCommunityIcons name="plus" size={16} color={gameColors.ink} />
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -693,6 +813,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   header: {
+    backgroundColor: "#F3D8A8",
+    borderBottomColor: "rgba(84, 52, 25, 0.16)",
+    borderBottomWidth: 1,
     gap: 9,
     paddingHorizontal: 16,
     paddingBottom: 10,
@@ -730,6 +853,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 34,
     paddingHorizontal: 8,
+    shadowColor: "#7B4A20",
+    shadowOffset: { height: 1, width: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
   },
   resourcePillCompact: {
     backgroundColor: "rgba(255, 244, 220, 0.94)",
@@ -849,6 +976,100 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 18,
   },
+  profileCard: {
+    alignItems: "center",
+    backgroundColor: "#F9E3BA",
+    borderColor: "rgba(84, 52, 25, 0.18)",
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 10,
+  },
+  profileAvatar: {
+    alignItems: "center",
+    backgroundColor: gameColors.green,
+    borderColor: gameColors.greenDark,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  profileCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  profileTitle: {
+    color: gameColors.ink,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  settingsGroup: {
+    backgroundColor: "#FFF8E9",
+    borderColor: "rgba(84, 52, 25, 0.16)",
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 9,
+    padding: 10,
+  },
+  settingsGroupTitle: {
+    color: gameColors.greenDark,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  settingRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 34,
+  },
+  settingLabel: {
+    color: gameColors.ink,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  volumeRow: {
+    gap: 7,
+  },
+  volumeRowDisabled: {
+    opacity: 0.58,
+  },
+  volumeControl: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+  },
+  volumeButton: {
+    alignItems: "center",
+    backgroundColor: "#F8E3B8",
+    borderColor: "rgba(84, 52, 25, 0.25)",
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: "center",
+    width: 30,
+  },
+  volumeTrack: {
+    backgroundColor: "#D7C4A2",
+    borderRadius: 8,
+    flex: 1,
+    height: 10,
+    overflow: "hidden",
+  },
+  volumeFill: {
+    backgroundColor: gameColors.blue,
+    height: "100%",
+  },
+  volumeValue: {
+    color: gameColors.muted,
+    fontSize: 12,
+    fontWeight: "900",
+    minWidth: 42,
+    textAlign: "right",
+  },
   settingsActions: {
     flexDirection: "row",
     gap: 10,
@@ -858,10 +1079,14 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: gameColors.panel,
-    borderColor: "rgba(84, 52, 25, 0.24)",
+    borderColor: "rgba(84, 52, 25, 0.3)",
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,
+    shadowColor: "#7B4A20",
+    shadowOffset: { height: 3, width: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
   },
   overlayPanel: {
     backgroundColor: "rgba(255, 244, 220, 0.94)",

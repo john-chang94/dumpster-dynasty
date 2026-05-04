@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { environmentSources } from '@/components/game/asset-sources';
-import { RaccoonArt, ZoneThumbnail } from '@/components/game/art';
+import { AnimatedRaccoonArt, RaccoonArt, ZoneThumbnail } from '@/components/game/art';
 import {
   ActionButton,
   Card,
@@ -31,6 +31,7 @@ import {
   ZoneId,
   ZONES,
 } from '@/constants/game';
+import { useMusicTrack } from '@/hooks/use-audio-events';
 import {
   getAvailableRaccoons,
   getEncounterChoiceChance,
@@ -54,6 +55,7 @@ const DEFAULT_TAB_BAR_STYLE = {
 
 export default function ScavengeScreen() {
   const now = useRunClock();
+  useMusicTrack('scavenge');
   const navigation = useNavigation();
   const { state, startRun, claimRun, unlockZone, resolveActiveEncounter } = useGame();
   const [view, setView] = useState<ScavengeView>('active');
@@ -126,6 +128,7 @@ export default function ScavengeScreen() {
           resources={state.resources}
           run={getRunForZone(state, zoneId)}
           startRun={startRun}
+          discoveredLoot={state.discoveredLoot}
           unlocked={state.unlockedZones.includes(zoneId)}
           unlockZone={unlockZone}
           viewRun={viewRun}
@@ -143,6 +146,7 @@ function ZoneCard({
   resources,
   run,
   now,
+  discoveredLoot,
   startRun,
   claimRun,
   unlockZone,
@@ -154,6 +158,7 @@ function ZoneCard({
   resources: ResourceBundle;
   run?: ScavengeRun;
   now: number;
+  discoveredLoot: string[];
   startRun: (zoneId: ZoneId, raccoonId: RaccoonId) => void;
   claimRun: (runId: string) => void;
   unlockZone: (zoneId: ZoneId) => void;
@@ -162,11 +167,16 @@ function ZoneCard({
   const zone = ZONES[zoneId];
   const ready = run ? isRunReady(run, now) : false;
   const canUnlock = Boolean(zone.unlockCost && hasResources(resources, zone.unlockCost));
+  const discoveredInZone = zone.loot.filter((lootId) => discoveredLoot.includes(lootId)).length;
+  const stars = getZoneCollectionStars(discoveredInZone, zone.loot.length);
 
   return (
-    <Card style={styles.zoneCard}>
+    <Card style={[styles.zoneCard, { borderColor: zone.palette.accent }]}>
+      <View style={[styles.zoneAccent, { backgroundColor: zone.palette.accent }]} />
       <View style={styles.zoneTop}>
-        <ZoneThumbnail height={82} width={96} zoneId={zoneId} />
+        <View style={[styles.zoneImageFrame, { backgroundColor: zone.palette.shadow }]}>
+          <ZoneThumbnail height={86} width={104} zoneId={zoneId} />
+        </View>
         <View style={styles.zoneCopy}>
           <View style={styles.zoneTitleRow}>
             <Text adjustsFontSizeToFit minimumFontScale={0.78} numberOfLines={1} style={styles.zoneName}>
@@ -175,6 +185,12 @@ function ZoneCard({
             <Text style={[styles.riskBadge, zone.risk === 'High' && styles.highRisk]}>{zone.risk}</Text>
           </View>
           <Text numberOfLines={2} style={styles.bodyText}>{zone.purpose}</Text>
+          <View style={styles.zoneProgressRow}>
+            <StarStrip stars={stars} />
+            <Text style={styles.zoneProgressText}>
+              {discoveredInZone} / {zone.loot.length} finds
+            </Text>
+          </View>
           <View style={styles.rewardPreview}>
             {RESOURCE_KEYS.filter((key) => zone.baseRewards[key] > 0).map((key) => (
               <ResourceAmount key={key} amount={zone.baseRewards[key]} resourceKey={key} />
@@ -250,6 +266,21 @@ function ZoneCard({
   );
 }
 
+function StarStrip({ stars }: { stars: number }) {
+  return (
+    <View style={styles.starStrip}>
+      {[0, 1, 2].map((index) => (
+        <MaterialCommunityIcons
+          color={index < stars ? gameColors.gold : '#B9A17E'}
+          key={index}
+          name={index < stars ? 'star' : 'star-outline'}
+          size={14}
+        />
+      ))}
+    </View>
+  );
+}
+
 function ActiveRunView({
   run,
   activeRuns,
@@ -283,7 +314,7 @@ function ActiveRunView({
       </View>
 
       <View style={styles.activeRaccoon}>
-        <RaccoonArt raccoonId={run.raccoonId} size={130} />
+        <AnimatedRaccoonArt animation={run.encounterResolved ? 'celebrate' : 'walk'} raccoonId={run.raccoonId} size={130} />
       </View>
 
       <View style={styles.bottomStack}>
@@ -474,6 +505,14 @@ function getRunRareChancePreview(run: ScavengeRun) {
   return Math.min(0.95, zone.rareChance + classBonus + run.rareBonus);
 }
 
+function getZoneCollectionStars(discoveredCount: number, totalCount: number) {
+  if (totalCount <= 0 || discoveredCount <= 0) {
+    return 0;
+  }
+
+  return Math.min(3, Math.ceil((discoveredCount / totalCount) * 3));
+}
+
 function getChoiceIcon(choiceId: ActiveEncounterChoiceId): keyof typeof MaterialCommunityIcons.glyphMap {
   switch (choiceId) {
     case 'hide':
@@ -513,11 +552,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   zoneCard: {
+    overflow: 'hidden',
     gap: 10,
+    paddingLeft: 16,
+  },
+  zoneAccent: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    top: 0,
+    width: 6,
   },
   zoneTop: {
     flexDirection: 'row',
     gap: 10,
+  },
+  zoneImageFrame: {
+    borderRadius: 8,
+    padding: 3,
   },
   zoneCopy: {
     flex: 1,
@@ -547,6 +599,26 @@ const styles = StyleSheet.create({
   },
   highRisk: {
     color: '#903A22',
+  },
+  zoneProgressRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  starStrip: {
+    alignItems: 'center',
+    backgroundColor: '#3B2614',
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 1,
+    minHeight: 24,
+    paddingHorizontal: 7,
+  },
+  zoneProgressText: {
+    color: gameColors.greenDark,
+    fontSize: 11,
+    fontWeight: '900',
   },
   bodyText: {
     color: gameColors.muted,

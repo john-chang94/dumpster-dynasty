@@ -8,8 +8,59 @@ export type LootRarity = 'common' | 'uncommon' | 'rare';
 export type QuestId = 'send_scavenges' | 'collect_scrap' | 'upgrade_building';
 export type MilestoneId = 'runs_3' | 'runs_8' | 'runs_15' | 'runs_30';
 export type ActiveEncounterChoiceId = 'hide' | 'dash' | 'grab';
+export type BaseThemeId = 'day' | 'night' | 'night_festival';
+export type RaccoonSkinId =
+  | 'scout_default'
+  | 'hauler_default'
+  | 'sniffer_default'
+  | 'sneak_default'
+  | 'scout_trail'
+  | 'hauler_workshop'
+  | 'sniffer_detective'
+  | 'sneak_shadow';
+export type AudioEventId =
+  | 'button_tap'
+  | 'confirm'
+  | 'cancel'
+  | 'tab_switch'
+  | 'resource_collect'
+  | 'resource_spend'
+  | 'not_enough_resource'
+  | 'scavenge_start'
+  | 'scavenge_complete'
+  | 'rare_find'
+  | 'active_success'
+  | 'active_fail'
+  | 'building_upgrade'
+  | 'raccoon_chirp'
+  | 'theme_switch';
 
 export type ResourceCost = Partial<ResourceBundle>;
+
+export type AudioSettings = {
+  musicEnabled: boolean;
+  sfxEnabled: boolean;
+  musicVolume: number;
+  sfxVolume: number;
+};
+
+export type BaseThemeDefinition = {
+  id: BaseThemeId;
+  label: string;
+  description: string;
+  unlockCopy: string;
+  backgroundKey: 'baseDay' | 'baseNight';
+  accentColor: string;
+};
+
+export type RaccoonSkinDefinition = {
+  id: RaccoonSkinId;
+  raccoonId: RaccoonId;
+  label: string;
+  description: string;
+  unlockCopy: string;
+  defaultOwned: boolean;
+};
 
 export type QuestDefinition = {
   id: QuestId;
@@ -50,6 +101,154 @@ export type ActiveEncounterResult = {
 };
 
 export const RESOURCE_KEYS: ResourceKey[] = ['food', 'scrap', 'shinies'];
+
+export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
+  musicEnabled: true,
+  sfxEnabled: true,
+  musicVolume: 0.7,
+  sfxVolume: 0.85,
+};
+
+export const AUDIO_EVENT_IDS: AudioEventId[] = [
+  'button_tap',
+  'confirm',
+  'cancel',
+  'tab_switch',
+  'resource_collect',
+  'resource_spend',
+  'not_enough_resource',
+  'scavenge_start',
+  'scavenge_complete',
+  'rare_find',
+  'active_success',
+  'active_fail',
+  'building_upgrade',
+  'raccoon_chirp',
+  'theme_switch',
+];
+
+export const BASE_THEME_IDS: BaseThemeId[] = ['day', 'night', 'night_festival'];
+export const DEFAULT_BASE_THEME_ID: BaseThemeId = 'day';
+export const DEFAULT_OWNED_BASE_THEME_IDS: BaseThemeId[] = ['day', 'night'];
+
+export const BASE_THEMES: Record<BaseThemeId, BaseThemeDefinition> = {
+  day: {
+    id: 'day',
+    label: 'Day Camp',
+    description: 'Warm daylight, open sorting paths, and a clear view of the growing base.',
+    unlockCopy: 'Available from the start.',
+    backgroundKey: 'baseDay',
+    accentColor: '#D97823',
+  },
+  night: {
+    id: 'night',
+    label: 'Night Watch',
+    description: 'A cozy after-dark base pass with stronger lantern glow and skyline contrast.',
+    unlockCopy: 'Available from the start.',
+    backgroundKey: 'baseNight',
+    accentColor: '#267FAE',
+  },
+  night_festival: {
+    id: 'night_festival',
+    label: 'Night Festival',
+    description: 'A future decoration theme for string lights, flags, and special base props.',
+    unlockCopy: 'Future decoration reward.',
+    backgroundKey: 'baseNight',
+    accentColor: '#8B5BB7',
+  },
+};
+
+export const RACCOON_SKIN_IDS: RaccoonSkinId[] = [
+  'scout_default',
+  'hauler_default',
+  'sniffer_default',
+  'sneak_default',
+  'scout_trail',
+  'hauler_workshop',
+  'sniffer_detective',
+  'sneak_shadow',
+];
+
+export const DEFAULT_RACCOON_SKINS: Record<RaccoonId, RaccoonSkinId> = {
+  scout: 'scout_default',
+  hauler: 'hauler_default',
+  sniffer: 'sniffer_default',
+  sneak: 'sneak_default',
+};
+
+export const DEFAULT_OWNED_RACCOON_SKIN_IDS: RaccoonSkinId[] = [
+  'scout_default',
+  'hauler_default',
+  'sniffer_default',
+  'sneak_default',
+];
+
+export const RACCOON_SKINS: Record<RaccoonSkinId, RaccoonSkinDefinition> = {
+  scout_default: {
+    id: 'scout_default',
+    raccoonId: 'scout',
+    label: 'Scout Classic',
+    description: 'Green bandana, tiny pack, and ready-for-anything route energy.',
+    unlockCopy: 'Default crew look.',
+    defaultOwned: true,
+  },
+  hauler_default: {
+    id: 'hauler_default',
+    raccoonId: 'hauler',
+    label: 'Bower Classic',
+    description: 'Work scarf, sturdy posture, and room for suspiciously many cans.',
+    unlockCopy: 'Default crew look.',
+    defaultOwned: true,
+  },
+  sniffer_default: {
+    id: 'sniffer_default',
+    raccoonId: 'sniffer',
+    label: 'Nibb Classic',
+    description: 'Curious goggles and a nose for collection gaps.',
+    unlockCopy: 'Default crew look.',
+    defaultOwned: true,
+  },
+  sneak_default: {
+    id: 'sneak_default',
+    raccoonId: 'sneak',
+    label: 'Shade Classic',
+    description: 'Purple stealth scarf for shinies that nobody was guarding closely enough.',
+    unlockCopy: 'Default crew look.',
+    defaultOwned: true,
+  },
+  scout_trail: {
+    id: 'scout_trail',
+    raccoonId: 'scout',
+    label: 'Trail Scout',
+    description: 'A future skin slot for trail badges and a bigger backpack.',
+    unlockCopy: 'Future cosmetic reward.',
+    defaultOwned: false,
+  },
+  hauler_workshop: {
+    id: 'hauler_workshop',
+    raccoonId: 'hauler',
+    label: 'Workshop Bower',
+    description: 'A future skin slot for gloves, tool belts, and extra crate confidence.',
+    unlockCopy: 'Future cosmetic reward.',
+    defaultOwned: false,
+  },
+  sniffer_detective: {
+    id: 'sniffer_detective',
+    raccoonId: 'sniffer',
+    label: 'Tiny Detective',
+    description: 'A future skin slot for magnifiers, case notes, and dramatic clues.',
+    unlockCopy: 'Future cosmetic reward.',
+    defaultOwned: false,
+  },
+  sneak_shadow: {
+    id: 'sneak_shadow',
+    raccoonId: 'sneak',
+    label: 'Moonlit Shade',
+    description: 'A future skin slot for darker wraps and extra moonlit sparkle.',
+    unlockCopy: 'Future cosmetic reward.',
+    defaultOwned: false,
+  },
+};
 
 export const EMPTY_RESOURCES: ResourceBundle = {
   food: 0,

@@ -4,12 +4,21 @@ import { AppState } from 'react-native';
 
 import {
   ACTIVE_ENCOUNTER_CHOICES,
+  AudioSettings,
   ActiveEncounterChoiceId,
   ActiveEncounterResult,
   addResources,
+  BASE_THEME_IDS,
+  BASE_THEMES,
+  BaseThemeId,
   BUILDINGS,
   BuildingId,
   createResourceBundle,
+  DEFAULT_AUDIO_SETTINGS,
+  DEFAULT_BASE_THEME_ID,
+  DEFAULT_OWNED_BASE_THEME_IDS,
+  DEFAULT_OWNED_RACCOON_SKIN_IDS,
+  DEFAULT_RACCOON_SKINS,
   DAILY_QUEST_IDS,
   DAILY_QUESTS,
   getBuildingUpgradeCost,
@@ -21,7 +30,10 @@ import {
   QuestId,
   RACCOON_CLASSES,
   RACCOONS,
+  RACCOON_SKIN_IDS,
+  RACCOON_SKINS,
   RaccoonId,
+  RaccoonSkinId,
   RESOURCE_KEYS,
   ResourceBundle,
   ResourceCost,
@@ -71,6 +83,11 @@ export type GameState = {
   questProgress: QuestProgress;
   claimedDailyQuestIds: QuestId[];
   claimedMilestoneIds: MilestoneId[];
+  selectedBaseThemeId: BaseThemeId;
+  ownedBaseThemeIds: BaseThemeId[];
+  ownedRaccoonSkinIds: RaccoonSkinId[];
+  equippedSkinByRaccoon: Record<RaccoonId, RaccoonSkinId>;
+  audioSettings: AudioSettings;
   lastSeenAt: number;
   totalRunsClaimed: number;
   lastMessage?: string;
@@ -89,6 +106,9 @@ type GameAction =
   | { type: 'claimDailyQuestReward'; questId: QuestId; now: number }
   | { type: 'claimMilestoneReward'; milestoneId: MilestoneId; now: number }
   | { type: 'resolveActiveEncounter'; runId: string; choiceId: ActiveEncounterChoiceId; now: number }
+  | { type: 'selectBaseTheme'; themeId: BaseThemeId; now: number }
+  | { type: 'equipRaccoonSkin'; raccoonId: RaccoonId; skinId: RaccoonSkinId; now: number }
+  | { type: 'updateAudioSettings'; settings: Partial<AudioSettings>; now: number }
   | { type: 'dismissOfflineSummary'; now: number }
   | { type: 'resetLocalSave'; now: number }
   | { type: 'clearMessage' };
@@ -106,6 +126,9 @@ type GameContextValue = {
   claimDailyQuestReward: (questId: QuestId) => void;
   claimMilestoneReward: (milestoneId: MilestoneId) => void;
   resolveActiveEncounter: (runId: string, choiceId: ActiveEncounterChoiceId) => void;
+  selectBaseTheme: (themeId: BaseThemeId) => void;
+  equipRaccoonSkin: (raccoonId: RaccoonId, skinId: RaccoonSkinId) => void;
+  updateAudioSettings: (settings: Partial<AudioSettings>) => void;
   dismissOfflineSummary: () => void;
   resetLocalSave: () => void;
   clearMessage: () => void;
@@ -191,6 +214,12 @@ export function GameProvider({ children }: PropsWithChildren) {
         dispatch({ type: 'claimMilestoneReward', milestoneId, now: Date.now() }),
       resolveActiveEncounter: (runId, choiceId) =>
         dispatch({ type: 'resolveActiveEncounter', runId, choiceId, now: Date.now() }),
+      selectBaseTheme: (themeId) =>
+        dispatch({ type: 'selectBaseTheme', themeId, now: Date.now() }),
+      equipRaccoonSkin: (raccoonId, skinId) =>
+        dispatch({ type: 'equipRaccoonSkin', raccoonId, skinId, now: Date.now() }),
+      updateAudioSettings: (settings) =>
+        dispatch({ type: 'updateAudioSettings', settings, now: Date.now() }),
       dismissOfflineSummary: () => dispatch({ type: 'dismissOfflineSummary', now: Date.now() }),
       resetLocalSave: () => {
         const now = Date.now();
@@ -257,6 +286,11 @@ export function createInitialState(now = Date.now()): GameState {
     questProgress: createQuestProgress(),
     claimedDailyQuestIds: [],
     claimedMilestoneIds: [],
+    selectedBaseThemeId: DEFAULT_BASE_THEME_ID,
+    ownedBaseThemeIds: DEFAULT_OWNED_BASE_THEME_IDS,
+    ownedRaccoonSkinIds: DEFAULT_OWNED_RACCOON_SKIN_IDS,
+    equippedSkinByRaccoon: DEFAULT_RACCOON_SKINS,
+    audioSettings: DEFAULT_AUDIO_SETTINGS,
     lastSeenAt: now,
     totalRunsClaimed: 0,
     lastMessage: 'Tap the loot pile, send Scout out, then upgrade the base.',
@@ -567,6 +601,73 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         lastMessageScope: 'scavenge',
       }, 'collect_scrap', result.immediateReward.scrap);
     }
+    case 'selectBaseTheme': {
+      const theme = BASE_THEMES[action.themeId];
+
+      if (!state.ownedBaseThemeIds.includes(action.themeId)) {
+        return {
+          ...state,
+          lastMessage: `${theme.label} is a future decoration reward.`,
+          lastMessageScope: 'collection',
+        };
+      }
+
+      return {
+        ...state,
+        selectedBaseThemeId: action.themeId,
+        lastSeenAt: action.now,
+        lastMessage: `${theme.label} applied to the base.`,
+        lastMessageScope: 'base',
+      };
+    }
+    case 'equipRaccoonSkin': {
+      const skin = RACCOON_SKINS[action.skinId];
+      const raccoon = RACCOONS[action.raccoonId];
+
+      if (skin.raccoonId !== action.raccoonId) {
+        return {
+          ...state,
+          lastMessage: `${skin.label} belongs to another raccoon.`,
+          lastMessageScope: 'collection',
+        };
+      }
+
+      if (!state.raccoons[action.raccoonId].unlocked) {
+        return {
+          ...state,
+          lastMessage: `Recruit ${raccoon.name} before changing skins.`,
+          lastMessageScope: 'collection',
+        };
+      }
+
+      if (!state.ownedRaccoonSkinIds.includes(action.skinId)) {
+        return {
+          ...state,
+          lastMessage: `${skin.label} is a future cosmetic reward.`,
+          lastMessageScope: 'collection',
+        };
+      }
+
+      return {
+        ...state,
+        equippedSkinByRaccoon: {
+          ...state.equippedSkinByRaccoon,
+          [action.raccoonId]: action.skinId,
+        },
+        lastSeenAt: action.now,
+        lastMessage: `${skin.label} equipped.`,
+        lastMessageScope: 'collection',
+      };
+    }
+    case 'updateAudioSettings':
+      return {
+        ...state,
+        audioSettings: normalizeAudioSettings({
+          ...state.audioSettings,
+          ...action.settings,
+        }),
+        lastSeenAt: action.now,
+      };
     case 'dismissOfflineSummary':
       return {
         ...state,
@@ -636,6 +737,9 @@ function mergeSavedState(saved: Partial<GameState>, now: number): GameState {
     };
   });
 
+  const ownedBaseThemeIds = normalizeOwnedBaseThemeIds(saved.ownedBaseThemeIds);
+  const ownedRaccoonSkinIds = normalizeOwnedRaccoonSkinIds(saved.ownedRaccoonSkinIds);
+
   return {
     ...base,
     resources: createResourceBundle(saved.resources),
@@ -650,6 +754,11 @@ function mergeSavedState(saved: Partial<GameState>, now: number): GameState {
     questProgress: normalizeQuestProgress(saved.questProgress),
     claimedDailyQuestIds: normalizeQuestIds(saved.claimedDailyQuestIds),
     claimedMilestoneIds: normalizeMilestoneIds(saved.claimedMilestoneIds),
+    selectedBaseThemeId: normalizeSelectedBaseTheme(saved.selectedBaseThemeId, ownedBaseThemeIds),
+    ownedBaseThemeIds,
+    ownedRaccoonSkinIds,
+    equippedSkinByRaccoon: normalizeEquippedSkins(saved.equippedSkinByRaccoon, ownedRaccoonSkinIds),
+    audioSettings: normalizeAudioSettings(saved.audioSettings),
     lastSeenAt: typeof saved.lastSeenAt === 'number' ? saved.lastSeenAt : now,
     totalRunsClaimed: typeof saved.totalRunsClaimed === 'number' ? saved.totalRunsClaimed : 0,
     lastMessage: saved.lastMessage,
@@ -665,6 +774,88 @@ function normalizeMessageScope(scope: unknown): MessageScope | undefined {
     scope === 'shop'
     ? scope
     : undefined;
+}
+
+function normalizeOwnedBaseThemeIds(savedThemeIds: unknown): BaseThemeId[] {
+  const savedIds = Array.isArray(savedThemeIds) ? savedThemeIds : [];
+  const validIds = savedIds.filter(
+    (themeId): themeId is BaseThemeId => (BASE_THEME_IDS as string[]).includes(themeId),
+  );
+
+  return Array.from(new Set<BaseThemeId>([...DEFAULT_OWNED_BASE_THEME_IDS, ...validIds]));
+}
+
+function normalizeSelectedBaseTheme(savedThemeId: unknown, ownedThemeIds: BaseThemeId[]): BaseThemeId {
+  if (
+    typeof savedThemeId === 'string' &&
+    (BASE_THEME_IDS as string[]).includes(savedThemeId) &&
+    ownedThemeIds.includes(savedThemeId as BaseThemeId)
+  ) {
+    return savedThemeId as BaseThemeId;
+  }
+
+  return DEFAULT_BASE_THEME_ID;
+}
+
+function normalizeOwnedRaccoonSkinIds(savedSkinIds: unknown): RaccoonSkinId[] {
+  const savedIds = Array.isArray(savedSkinIds) ? savedSkinIds : [];
+  const validIds = savedIds.filter(
+    (skinId): skinId is RaccoonSkinId => (RACCOON_SKIN_IDS as string[]).includes(skinId),
+  );
+
+  return Array.from(new Set<RaccoonSkinId>([...DEFAULT_OWNED_RACCOON_SKIN_IDS, ...validIds]));
+}
+
+function normalizeEquippedSkins(
+  savedEquippedSkins: unknown,
+  ownedSkinIds: RaccoonSkinId[],
+): Record<RaccoonId, RaccoonSkinId> {
+  const equippedSkins = { ...DEFAULT_RACCOON_SKINS };
+  const savedSkins =
+    savedEquippedSkins && typeof savedEquippedSkins === 'object'
+      ? (savedEquippedSkins as Partial<Record<RaccoonId, unknown>>)
+      : {};
+
+  (Object.keys(RACCOONS) as RaccoonId[]).forEach((raccoonId) => {
+    const savedSkinId = savedSkins[raccoonId];
+
+    if (
+      typeof savedSkinId === 'string' &&
+      (RACCOON_SKIN_IDS as string[]).includes(savedSkinId) &&
+      ownedSkinIds.includes(savedSkinId as RaccoonSkinId) &&
+      RACCOON_SKINS[savedSkinId as RaccoonSkinId].raccoonId === raccoonId
+    ) {
+      equippedSkins[raccoonId] = savedSkinId as RaccoonSkinId;
+    }
+  });
+
+  return equippedSkins;
+}
+
+function normalizeAudioSettings(savedSettings: unknown): AudioSettings {
+  const settings =
+    savedSettings && typeof savedSettings === 'object'
+      ? (savedSettings as Partial<AudioSettings>)
+      : {};
+
+  return {
+    musicEnabled:
+      typeof settings.musicEnabled === 'boolean'
+        ? settings.musicEnabled
+        : DEFAULT_AUDIO_SETTINGS.musicEnabled,
+    sfxEnabled:
+      typeof settings.sfxEnabled === 'boolean'
+        ? settings.sfxEnabled
+        : DEFAULT_AUDIO_SETTINGS.sfxEnabled,
+    musicVolume:
+      typeof settings.musicVolume === 'number' && !Number.isNaN(settings.musicVolume)
+        ? clampNumber(settings.musicVolume, 0, 1)
+        : DEFAULT_AUDIO_SETTINGS.musicVolume,
+    sfxVolume:
+      typeof settings.sfxVolume === 'number' && !Number.isNaN(settings.sfxVolume)
+        ? clampNumber(settings.sfxVolume, 0, 1)
+        : DEFAULT_AUDIO_SETTINGS.sfxVolume,
+  };
 }
 
 function normalizeUnlockedZones(savedZones: unknown): ZoneId[] {

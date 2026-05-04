@@ -1,4 +1,6 @@
 import {
+  BASE_THEMES,
+  BaseThemeId,
   BuildingId,
   getBuildingStage,
   RaccoonId,
@@ -8,6 +10,7 @@ import {
 
 export type AssetSource = number;
 export type TabKey = "base" | "scavenge" | "build" | "collection" | "shop";
+export type RaccoonAnimationId = "idle" | "walk" | "tap" | "celebrate" | "fail";
 
 export const resourceIconSources: Record<ResourceKey, AssetSource> = {
   food: require("../../assets/sliced/resources/resource_icon_food.png"),
@@ -58,6 +61,126 @@ const raccoonIdleSources: Record<RaccoonId, AssetSource> = {
   hauler: require("../../assets/sliced/classes/hauler/raccoon_hauler_idle_01.png"),
   sniffer: require("../../assets/sliced/classes/sniffer/raccoon_sniffer_idle_01.png"),
   sneak: require("../../assets/sliced/classes/sneaker/raccoon_sneaker_idle_01.png"),
+};
+
+const raccoonAnimationSources: Record<
+  RaccoonId,
+  Record<RaccoonAnimationId, AssetSource[]>
+> = {
+  scout: {
+    idle: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_idle_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_idle_02.png"),
+    ],
+    walk: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_walk_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_walk_02.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_walk_03.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_walk_04.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_walk_05.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_walk_06.png"),
+    ],
+    tap: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_tap_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_tap_02.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_tap_03.png"),
+    ],
+    celebrate: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_celebrate_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_celebrate_02.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_celebrate_03.png"),
+    ],
+    fail: [
+      require("../../assets/sliced/classes/scout/raccoon_scout_fail_01.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_fail_02.png"),
+      require("../../assets/sliced/classes/scout/raccoon_scout_fail_03.png"),
+    ],
+  },
+  hauler: {
+    idle: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_idle_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_idle_02.png"),
+    ],
+    walk: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_02.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_03.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_04.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_05.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_walk_06.png"),
+    ],
+    tap: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_02.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_tap_03.png"),
+    ],
+    celebrate: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_celebrate_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_celebrate_02.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_celebrate_03.png"),
+    ],
+    fail: [
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_fail_01.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_fail_02.png"),
+      require("../../assets/sliced/classes/hauler/raccoon_hauler_fail_03.png"),
+    ],
+  },
+  sniffer: {
+    idle: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_idle_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_idle_02.png"),
+    ],
+    walk: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_02.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_03.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_walk_04.png"),
+    ],
+    tap: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_02.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_tap_03.png"),
+    ],
+    celebrate: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_celebrate_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_celebrate_02.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_celebrate_03.png"),
+    ],
+    fail: [
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_fail_01.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_fail_02.png"),
+      require("../../assets/sliced/classes/sniffer/raccoon_sniffer_fail_03.png"),
+    ],
+  },
+  sneak: {
+    idle: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_idle_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_idle_02.png"),
+    ],
+    walk: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_02.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_03.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_04.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_walk_05.png"),
+    ],
+    tap: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_02.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_tap_03.png"),
+    ],
+    celebrate: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_celebrate_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_celebrate_02.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_celebrate_03.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_celebrate_04.png"),
+    ],
+    fail: [
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_fail_01.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_fail_02.png"),
+      require("../../assets/sliced/classes/sneaker/raccoon_sneaker_fail_03.png"),
+    ],
+  },
 };
 
 export const raccoonPortraitSources: Record<RaccoonId, AssetSource> = {
@@ -140,6 +263,17 @@ export function getRaccoonSource(
   return locked ? lockedRaccoonSource : raccoonIdleSources[raccoonId];
 }
 
+export function getRaccoonAnimationSources(
+  raccoonId: RaccoonId,
+  animation: RaccoonAnimationId,
+): AssetSource[] {
+  return raccoonAnimationSources[raccoonId][animation] ?? raccoonAnimationSources[raccoonId].idle;
+}
+
 export function getZoneEnvironmentSource(zoneId: ZoneId): AssetSource {
   return environmentSources[zoneId];
+}
+
+export function getBaseThemeSource(themeId: BaseThemeId): AssetSource {
+  return environmentSources[BASE_THEMES[themeId].backgroundKey];
 }

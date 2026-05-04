@@ -1,31 +1,83 @@
 import { Image } from 'expo-image';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ImageStyle, StyleProp, StyleSheet, View } from 'react-native';
 
 import {
   environmentSources,
+  getBaseThemeSource,
   getBuildingSource,
   getLootSource,
+  getRaccoonAnimationSources,
   getRaccoonSource,
   getZoneEnvironmentSource,
   lockedPanelSource,
+  RaccoonAnimationId,
 } from '@/components/game/asset-sources';
-import { BuildingId, RaccoonId, ZoneId } from '@/constants/game';
+import { BaseThemeId, BuildingId, RaccoonId, ZoneId } from '@/constants/game';
 
 export function RaccoonArt({
   raccoonId,
   size = 96,
   locked = false,
+  style,
 }: {
   raccoonId: RaccoonId;
   size?: number;
   locked?: boolean;
+  style?: StyleProp<ImageStyle>;
 }) {
   return (
     <Image
       accessibilityIgnoresInvertColors
       contentFit="contain"
       source={getRaccoonSource(raccoonId, locked)}
-      style={{ height: size, width: size }}
+      style={[{ height: size, width: size }, style]}
+    />
+  );
+}
+
+export function AnimatedRaccoonArt({
+  raccoonId,
+  animation = 'idle',
+  size = 96,
+  locked = false,
+  intervalMs = 420,
+  style,
+}: {
+  raccoonId: RaccoonId;
+  animation?: RaccoonAnimationId;
+  size?: number;
+  locked?: boolean;
+  intervalMs?: number;
+  style?: StyleProp<ImageStyle>;
+}) {
+  const frames = useMemo(
+    () => getRaccoonAnimationSources(raccoonId, animation),
+    [animation, raccoonId],
+  );
+  const [frameIndex, setFrameIndex] = useState(0);
+
+  useEffect(() => {
+    setFrameIndex(0);
+
+    if (locked || frames.length <= 1) {
+      return;
+    }
+
+    const timer = setInterval(
+      () => setFrameIndex((currentFrame) => (currentFrame + 1) % frames.length),
+      intervalMs,
+    );
+
+    return () => clearInterval(timer);
+  }, [frames, intervalMs, locked]);
+
+  return (
+    <Image
+      accessibilityIgnoresInvertColors
+      contentFit="contain"
+      source={locked ? getRaccoonSource(raccoonId, true) : frames[frameIndex % frames.length]}
+      style={[{ height: size, width: size }, style]}
     />
   );
 }
@@ -94,6 +146,25 @@ export function BaseBackdrop({ height = 310 }: { height?: number }) {
         accessibilityIgnoresInvertColors
         contentFit="cover"
         source={environmentSources.baseDay}
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
+  );
+}
+
+export function BaseThemePreview({
+  themeId,
+  height = 112,
+}: {
+  themeId: BaseThemeId;
+  height?: number;
+}) {
+  return (
+    <View style={[styles.imageFrame, { height, width: '100%' }]}>
+      <Image
+        accessibilityIgnoresInvertColors
+        contentFit="cover"
+        source={getBaseThemeSource(themeId)}
         style={StyleSheet.absoluteFill}
       />
     </View>
