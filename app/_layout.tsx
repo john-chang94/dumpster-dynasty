@@ -3,6 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { GameRewardEffectsLayer } from '@/components/game/game-reward-effects';
+import { MusicSessionProvider } from '@/components/game/music-session';
 import { GameToastHost } from '@/components/game/ui';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GameProvider } from '@/state/game-store';
@@ -17,12 +19,15 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <GameProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Dumpster Notes' }} />
-        </Stack>
-        <GameToastHost />
-        <StatusBar style="dark" />
+        <MusicSessionProvider>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Dumpster Notes' }} />
+          </Stack>
+          <GameRewardEffectsLayer />
+          <GameToastHost />
+          <StatusBar style="dark" />
+        </MusicSessionProvider>
       </GameProvider>
     </ThemeProvider>
   );

@@ -61,8 +61,9 @@ type SceneScreenProps = PropsWithChildren<{
   background: AssetSource;
   title: string;
   subtitle?: string;
-  rightAction?: ReactNode;
   compactHud?: boolean;
+  leftAccessory?: ReactNode;
+  rightAction?: ReactNode;
 }>;
 
 type GameScreenProps = PropsWithChildren<{
@@ -116,6 +117,7 @@ export function SceneScreen({
   subtitle,
   rightAction,
   compactHud = false,
+  leftAccessory,
   children,
 }: SceneScreenProps) {
   const { loaded } = useGame();
@@ -127,32 +129,59 @@ export function SceneScreen({
         accessibilityIgnoresInvertColors
         contentFit="cover"
         source={background}
-        style={StyleSheet.absoluteFill}
+        style={styles.sceneBackdrop}
       />
       <View style={styles.sceneShade} />
       <SafeAreaView edges={["top"]} style={styles.sceneSafe}>
-        <View style={[styles.sceneHud, compactHud && styles.sceneHudCompact]}>
-          <View
-            style={[
-              styles.sceneTitlePill,
-              compactHud && styles.sceneTitlePillCompact,
-            ]}
-          >
-            <Text style={styles.sceneTitle}>{title}</Text>
-            {subtitle ? (
-              <Text style={styles.sceneSubtitle}>{subtitle}</Text>
-            ) : null}
+        {compactHud ? (
+          <View style={styles.sceneHudCompactTriple}>
+            <View style={styles.sceneHudTripleSide}>
+              {leftAccessory ?? <View style={styles.sceneHudTripleSpacer} />}
+            </View>
+            <View style={styles.sceneHudTripleCenter}>
+              <View
+                style={[
+                  styles.sceneTitlePill,
+                  styles.sceneTitlePillActiveHudCenter,
+                ]}
+              >
+                <Text style={styles.sceneTitle}>{title}</Text>
+                {subtitle ? (
+                  <Text style={styles.sceneSubtitle}>{subtitle}</Text>
+                ) : null}
+              </View>
+            </View>
+            <View style={styles.sceneHudTripleSide}>
+              {rightAction ?? (
+                <IconButton
+                  accessibilityLabel="Settings"
+                  icon="cog"
+                  onPress={() => setSettingsOpen(true)}
+                />
+              )}
+            </View>
           </View>
-          <View style={styles.sceneHudRight}>
-            {rightAction ?? (
-              <IconButton
-                accessibilityLabel="Settings"
-                icon="cog"
-                onPress={() => setSettingsOpen(true)}
-              />
-            )}
+        ) : (
+          <View style={styles.sceneHud}>
+            <View style={styles.sceneTitlePillGrow}>
+              <View style={styles.sceneTitlePill}>
+                <Text style={styles.sceneTitle}>{title}</Text>
+                {subtitle ? (
+                  <Text style={styles.sceneSubtitle}>{subtitle}</Text>
+                ) : null}
+              </View>
+            </View>
+            <View style={styles.sceneHudRight}>
+              {rightAction ?? (
+                <IconButton
+                  accessibilityLabel="Settings"
+                  icon="cog"
+                  onPress={() => setSettingsOpen(true)}
+                />
+              )}
+            </View>
           </View>
-        </View>
+        )}
         {compactHud ? null : <ResourceBar compact />}
         {!loaded ? (
           <View style={styles.sceneLoadingState}>
@@ -491,7 +520,9 @@ function SettingsMenu({
 }) {
   const router = useRouter();
   const { state, resetLocalSave, updateAudioSettings } = useGame();
-  const recruitedCount = Object.values(state.raccoons).filter((raccoon) => raccoon.unlocked).length;
+  const recruitedCount = Object.values(state.raccoons).filter(
+    (raccoon) => raccoon.unlocked,
+  ).length;
 
   const handleReset = () => {
     onClose();
@@ -511,7 +542,9 @@ function SettingsMenu({
           <View style={styles.settingsHeader}>
             <View style={styles.settingsTitleBlock}>
               <Text style={styles.settingsTitle}>Settings</Text>
-              <Text style={styles.settingsSubtitle}>Profile, audio, and testing</Text>
+              <Text style={styles.settingsSubtitle}>
+                Profile, audio, and testing
+              </Text>
             </View>
             <IconButton
               accessibilityLabel="Close settings"
@@ -527,7 +560,8 @@ function SettingsMenu({
             <View style={styles.profileCopy}>
               <Text style={styles.profileTitle}>Local Raccoon Empire</Text>
               <Text style={styles.settingsBody}>
-                {recruitedCount} / {Object.keys(RACCOONS).length} crew recruited - {state.totalRunsClaimed} runs claimed
+                {recruitedCount} / {Object.keys(RACCOONS).length} crew recruited
+                - {state.totalRunsClaimed} runs claimed
               </Text>
             </View>
           </View>
@@ -537,7 +571,9 @@ function SettingsMenu({
             <SettingToggle
               label="Music"
               value={state.audioSettings.musicEnabled}
-              onValueChange={(musicEnabled) => updateAudioSettings({ musicEnabled })}
+              onValueChange={(musicEnabled) =>
+                updateAudioSettings({ musicEnabled })
+              }
             />
             <VolumeStepper
               disabled={!state.audioSettings.musicEnabled}
@@ -548,7 +584,9 @@ function SettingsMenu({
             <SettingToggle
               label="Sound effects"
               value={state.audioSettings.sfxEnabled}
-              onValueChange={(sfxEnabled) => updateAudioSettings({ sfxEnabled })}
+              onValueChange={(sfxEnabled) =>
+                updateAudioSettings({ sfxEnabled })
+              }
             />
             <VolumeStepper
               disabled={!state.audioSettings.sfxEnabled}
@@ -556,12 +594,20 @@ function SettingsMenu({
               value={state.audioSettings.sfxVolume}
               onChange={(sfxVolume) => updateAudioSettings({ sfxVolume })}
             />
+            <SettingToggle
+              label="Haptics"
+              value={state.audioSettings.hapticsEnabled}
+              onValueChange={(hapticsEnabled) =>
+                updateAudioSettings({ hapticsEnabled })
+              }
+            />
           </View>
 
           <View style={styles.settingsGroup}>
             <Text style={styles.settingsGroupTitle}>Testing</Text>
             <Text style={styles.settingsBody}>
-              Reset clears this device save and starts the prototype from the beginning.
+              Reset clears this device save and starts the prototype from the
+              beginning.
             </Text>
           </View>
 
@@ -633,14 +679,20 @@ function VolumeStepper({
           accessibilityLabel={`Lower ${label}`}
           accessibilityRole="button"
           disabled={disabled || value <= 0}
-          onPress={() => onChange(Math.max(0, Math.round((value - 0.1) * 10) / 10))}
+          onPress={() =>
+            onChange(Math.max(0, Math.round((value - 0.1) * 10) / 10))
+          }
           style={({ pressed }) => [
             styles.volumeButton,
             pressed && !disabled && styles.pressedButton,
             (disabled || value <= 0) && styles.disabledButton,
           ]}
         >
-          <MaterialCommunityIcons name="minus" size={16} color={gameColors.ink} />
+          <MaterialCommunityIcons
+            name="minus"
+            size={16}
+            color={gameColors.ink}
+          />
         </Pressable>
         <View style={styles.volumeTrack}>
           <View style={[styles.volumeFill, { width: `${percent}%` }]} />
@@ -650,14 +702,20 @@ function VolumeStepper({
           accessibilityLabel={`Raise ${label}`}
           accessibilityRole="button"
           disabled={disabled || value >= 1}
-          onPress={() => onChange(Math.min(1, Math.round((value + 0.1) * 10) / 10))}
+          onPress={() =>
+            onChange(Math.min(1, Math.round((value + 0.1) * 10) / 10))
+          }
           style={({ pressed }) => [
             styles.volumeButton,
             pressed && !disabled && styles.pressedButton,
             (disabled || value >= 1) && styles.disabledButton,
           ]}
         >
-          <MaterialCommunityIcons name="plus" size={16} color={gameColors.ink} />
+          <MaterialCommunityIcons
+            name="plus"
+            size={16}
+            color={gameColors.ink}
+          />
         </Pressable>
       </View>
     </View>
@@ -751,6 +809,9 @@ const styles = StyleSheet.create({
     backgroundColor: gameColors.ink,
     flex: 1,
   },
+  sceneBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
   sceneShade: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(28, 18, 9, 0.18)",
@@ -765,8 +826,32 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 6,
   },
-  sceneHudCompact: {
+  sceneHudCompactTriple: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    justifyContent: "space-between",
     paddingTop: 4,
+    width: "100%",
+  },
+  sceneHudTripleSide: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 44,
+  },
+  sceneHudTripleSpacer: {
+    height: 40,
+    width: 44,
+  },
+  sceneHudTripleCenter: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    minWidth: 0,
+  },
+  sceneTitlePillGrow: {
+    flex: 1,
+    minWidth: 0,
   },
   sceneTitlePill: {
     backgroundColor: "rgba(255, 244, 220, 0.92)",
@@ -777,9 +862,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
-  sceneTitlePillCompact: {
+  sceneTitlePillActiveHudCenter: {
+    alignSelf: "center",
     flex: 0,
-    minWidth: 170,
+    maxWidth: "100%",
+    minWidth: 0,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
@@ -882,7 +969,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     gap: 14,
-    paddingBottom: 10,
+    paddingVertical: 10,
     paddingHorizontal: 16,
   },
   fixedContent: {

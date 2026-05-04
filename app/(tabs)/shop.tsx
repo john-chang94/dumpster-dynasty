@@ -6,10 +6,12 @@ import { resourceIconSources } from '@/components/game/asset-sources';
 import { RaccoonArt } from '@/components/game/art';
 import { ActionButton, Card, GameScreen, gameColors, SectionTitle, StatLine } from '@/components/game/ui';
 import { RESOURCE_CONFIG, RESOURCE_KEYS, ResourceKey } from '@/constants/game';
+import { useMusicTrack } from '@/hooks/use-audio-events';
 import { useGame } from '@/state/game-store';
 
 export default function ShopScreen() {
   const { state } = useGame();
+  useMusicTrack('home');
   const recruitedCount = Object.values(state.raccoons).filter((raccoon) => raccoon.unlocked).length;
 
   return (

@@ -153,13 +153,20 @@ export function ZoneThumbnail({
   zoneId,
   width = 112,
   height = 82,
+  fill = false,
 }: {
   zoneId: ZoneId;
   width?: number;
   height?: number;
+  /** Grow to parent height (use with a column flex parent that stretches in a row). */
+  fill?: boolean;
 }) {
   return (
-    <View style={[styles.imageFrame, { height, width }]}>
+    <View
+      style={[
+        styles.imageFrame,
+        fill ? { flex: 1, minHeight: 72, width } : { height, width },
+      ]}>
       <Image
         accessibilityIgnoresInvertColors
         contentFit="cover"

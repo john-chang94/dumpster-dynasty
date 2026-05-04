@@ -15,9 +15,13 @@ import {
 } from '@/components/game/ui';
 import { useMusicTrack } from '@/hooks/use-audio-events';
 import {
+  BASE_BUILDING_LAYOUT,
+  BASE_RACCOON_LAYOUT,
+  playfieldToPercent,
+} from '@/constants/base-playfield';
+import {
   BASE_THEMES,
   BaseThemeId,
-  BuildingId,
   formatDuration,
   RACCOONS,
   RaccoonId,
@@ -33,78 +37,30 @@ import {
   useRunClock,
 } from '@/state/game-store';
 
-const baseBuildingPositions: { id: BuildingId; left: `${number}%`; top: `${number}%`; size: number }[] = [
-  { id: 'snack', left: '6%', top: '42%', size: 66 },
-  { id: 'sort', left: '58%', top: '39%', size: 70 },
-  { id: 'nest', left: '28%', top: '54%', size: 72 },
-  { id: 'vault', left: '71%', top: '55%', size: 68 },
-  { id: 'training', left: '43%', top: '68%', size: 62 },
-];
-
-const baseRaccoonPositions: {
-  id: RaccoonId;
-  left?: `${number}%`;
-  right?: `${number}%`;
-  top: `${number}%`;
-  size: number;
-  route: {
-    dx: number;
-    dy: number;
-    moveAnimation: 'walk' | 'carry';
-  }[];
-}[] = [
-  {
-    id: 'scout',
-    left: '13%',
-    top: '76%',
-    size: 70,
-    route: [
-      { dx: 34, dy: 10, moveAnimation: 'walk' },
-      { dx: -16, dy: -8, moveAnimation: 'walk' },
-      { dx: 0, dy: 0, moveAnimation: 'walk' },
-    ],
-  },
-  {
-    id: 'hauler',
-    right: '8%',
-    top: '74%',
-    size: 64,
-    route: [
-      { dx: -72, dy: -6, moveAnimation: 'walk' },
-      { dx: 0, dy: 0, moveAnimation: 'carry' },
-      { dx: -18, dy: 12, moveAnimation: 'walk' },
-      { dx: 0, dy: 0, moveAnimation: 'walk' },
-    ],
-  },
-  {
-    id: 'sniffer',
-    left: '35%',
-    top: '82%',
-    size: 58,
-    route: [
-      { dx: 42, dy: -8, moveAnimation: 'walk' },
-      { dx: -34, dy: 6, moveAnimation: 'walk' },
-      { dx: 0, dy: 0, moveAnimation: 'walk' },
-    ],
-  },
-  {
-    id: 'sneak',
-    left: '54%',
-    top: '86%',
-    size: 52,
-    route: [
-      { dx: 20, dy: -6, moveAnimation: 'walk' },
-      { dx: -22, dy: 8, moveAnimation: 'walk' },
-      { dx: 0, dy: 0, moveAnimation: 'walk' },
-    ],
-  },
-];
+function tutorialTipLine(phase: number): string | null {
+  switch (phase) {
+    case 0:
+      return 'Guide: Tap Quick Sort below once.';
+    case 1:
+      return 'Guide: Jump to Scavenge and deploy a loot run.';
+    case 2:
+      return 'Guide: Claim your haul here when ready.';
+    case 3:
+      return 'Guide: Spend scrap to upgrade anything in Build.';
+    case 4:
+      return 'Guide: Peek the Collection tab for quests.';
+    default:
+      return null;
+  }
+}
 
 export default function BaseScreen() {
   const router = useRouter();
-  useMusicTrack('base');
+  useMusicTrack('home');
   const now = useRunClock();
   const { state, claimOfflineRewards, tapLootPile, claimRun, selectBaseTheme } = useGame();
+  const [hudHeight, setHudHeight] = useState(300);
+  const tutorTip = tutorialTipLine(state.tutorialPhase);
   const pendingOfflineTotal = getResourceTotal(state.pendingOfflineRewards);
   const offlineSummary = state.offlineSummary;
   const offlineElapsed = offlineSummary ? formatDuration(Math.ceil(offlineSummary.elapsedMs / 1000)) : null;
@@ -138,36 +94,41 @@ export default function BaseScreen() {
       background={getBaseThemeSource(state.selectedBaseThemeId)}
       title="Home Base"
       subtitle={`Crew ${getRecruitCount(state.raccoons)} / 4`}>
-      <View style={styles.sceneLayer}>
+      <View style={[styles.sceneLayer, { bottom: hudHeight }]}>
         <View style={[styles.sparkle, styles.sparkleOne]} />
         <View style={[styles.sparkle, styles.sparkleTwo]} />
         <View style={[styles.sparkle, styles.sparkleThree]} />
-        {baseBuildingPositions.map(({ id, left, top, size }) => (
-          <Pressable
-            accessibilityRole="button"
-            key={id}
-            onPress={() => router.push('/build')}
-            style={[styles.sceneBuilding, { left, top }]}>
-            <BuildingArt buildingId={id} level={state.buildings[id].level} size={size} />
-            <Text style={styles.sceneTag}>Lv {state.buildings[id].level}</Text>
-          </Pressable>
-        ))}
-        {baseRaccoonPositions
-          .filter(({ id }) => id === 'scout' || state.raccoons[id].unlocked)
-          .map(({ id, left, right, top, size, route }) => (
-            <HomeBaseRaccoon
+        {BASE_BUILDING_LAYOUT.map(({ id, nx, ny, size }) => {
+          const pos = playfieldToPercent(nx, ny);
+
+          return (
+            <Pressable
+              accessibilityRole="button"
               key={id}
-              left={left}
-              raccoonId={id}
-              route={route}
-              right={right}
-              size={size}
-              top={top}
-            />
-          ))}
+              onPress={() =>
+                router.push({
+                  pathname: '/build',
+                  params: { focus: id },
+                })
+              }
+              style={[styles.sceneBuilding, pos]}>
+              <BuildingArt buildingId={id} level={state.buildings[id].level} size={size} />
+              <Text style={styles.sceneTag}>Lv {state.buildings[id].level}</Text>
+            </Pressable>
+          );
+        })}
+        {BASE_RACCOON_LAYOUT.filter(({ id }) => id === 'scout' || state.raccoons[id].unlocked).map(
+          ({ id, nx, ny, size, route }) => {
+            const pos = playfieldToPercent(nx, ny);
+
+            return <HomeBaseRaccoon key={id} home={pos} raccoonId={id} route={route} size={size} />;
+          },
+        )}
       </View>
 
-      <View style={styles.bottomStack}>
+      <View
+        onLayout={(event) => setHudHeight(Math.ceil(event.nativeEvent.layout.height) + 10)}
+        style={styles.bottomStack}>
         {pendingOfflineTotal > 0 ? (
           <OverlayPanel style={styles.offlinePanel}>
             <View style={styles.panelCopy}>
@@ -189,11 +150,16 @@ export default function BaseScreen() {
             <View style={styles.panelCopy}>
               <Text style={styles.panelKicker}>Objective</Text>
               <Text style={styles.objectiveText}>{objective}</Text>
+              {tutorTip ? <Text style={styles.tutorialBanner}>{tutorTip}</Text> : null}
             </View>
           </View>
 
           {activeRun ? (
-            <View style={styles.activeRunRow}>
+            <View
+              style={[
+                styles.activeRunRow,
+                state.tutorialPhase === 2 ? styles.tutorialRingPadding : undefined,
+              ]}>
               <RaccoonArt raccoonId={activeRun.raccoonId} size={40} />
               <View style={styles.panelCopy}>
                 <Text adjustsFontSizeToFit minimumFontScale={0.78} numberOfLines={1} style={styles.activeRunTitle}>
@@ -232,12 +198,16 @@ export default function BaseScreen() {
           </View>
 
           <View style={styles.actionRow}>
-            <ActionButton icon="magnify" onPress={() => router.push('/scavenge')} style={styles.primaryAction}>
-              Start Loot Run
-            </ActionButton>
-            <ActionButton icon="basket-fill" tone="secondary" onPress={tapLootPile} style={styles.secondaryAction}>
-              Quick Sort
-            </ActionButton>
+            <View style={[styles.actionPrimaryWrap, state.tutorialPhase === 1 && styles.tutorialRing]}>
+              <ActionButton icon="magnify" onPress={() => router.push('/scavenge')} style={styles.primaryAction}>
+                Start Loot Run
+              </ActionButton>
+            </View>
+            <View style={[styles.actionSecondaryWrap, state.tutorialPhase === 0 && styles.tutorialRing]}>
+              <ActionButton icon="basket-fill" tone="secondary" onPress={tapLootPile} style={styles.secondaryAction}>
+                Quick Sort
+              </ActionButton>
+            </View>
           </View>
         </OverlayPanel>
       </View>
@@ -247,16 +217,12 @@ export default function BaseScreen() {
 
 function HomeBaseRaccoon({
   raccoonId,
-  left,
-  right,
-  top,
+  home,
   size,
   route,
 }: {
   raccoonId: RaccoonId;
-  left?: `${number}%`;
-  right?: `${number}%`;
-  top: `${number}%`;
+  home: { left: `${number}%`; top: `${number}%` };
   size: number;
   route: {
     dx: number;
@@ -268,18 +234,60 @@ function HomeBaseRaccoon({
   const translateY = useRef(new Animated.Value(0)).current;
   const currentOffset = useRef({ x: 0, y: 0 });
   const routeIndex = useRef(0);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const tapTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [animation, setAnimation] = useState<RaccoonAnimationId>('idle');
   const [facing, setFacing] = useState(1);
   const [tapFrameIndex, setTapFrameIndex] = useState<number | undefined>();
   const firstDelayMs = useMemo(() => getIdleDelayMs(), []);
 
+  function clearIdleTimer() {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+
+      idleTimerRef.current = undefined;
+    }
+  }
+
+  /** Snap currentOffset and Animated values to the raccoon's actual position after stopping motion. */
+  function freezeWanderPosition() {
+    let settledX = currentOffset.current.x;
+    let settledY = currentOffset.current.y;
+    let pending = 2;
+
+    const finishAxis = () => {
+      pending -= 1;
+
+      if (pending === 0) {
+        currentOffset.current = { x: settledX, y: settledY };
+        translateX.setValue(settledX);
+        translateY.setValue(settledY);
+      }
+    };
+
+    translateX.stopAnimation((value) => {
+      settledX = value;
+      finishAxis();
+    });
+    translateY.stopAnimation((value) => {
+      settledY = value;
+      finishAxis();
+    });
+  }
+
   useEffect(() => {
+    if (tapFrameIndex !== undefined) {
+      return;
+    }
+
     let cancelled = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const scheduleNextWander = (delayMs: number) => {
-      timeout = setTimeout(() => {
+      clearIdleTimer();
+
+      idleTimerRef.current = setTimeout(() => {
+        idleTimerRef.current = undefined;
+
         if (cancelled) {
           return;
         }
@@ -321,25 +329,27 @@ function HomeBaseRaccoon({
 
     return () => {
       cancelled = true;
+      clearIdleTimer();
+      freezeWanderPosition();
+    };
+  }, [firstDelayMs, route, tapFrameIndex, translateX, translateY]);
 
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-
+  useEffect(() => {
+    return () => {
       if (tapTimeout.current) {
         clearTimeout(tapTimeout.current);
       }
-
-      translateX.stopAnimation();
-      translateY.stopAnimation();
     };
-  }, [firstDelayMs, route, translateX, translateY]);
+  }, []);
 
   const handleRaccoonTap = () => {
     if (tapTimeout.current) {
       clearTimeout(tapTimeout.current);
     }
 
+    clearIdleTimer();
+    freezeWanderPosition();
+    setAnimation('idle');
     setTapFrameIndex(getTapFrameIndex());
 
     tapTimeout.current = setTimeout(() => {
@@ -352,9 +362,7 @@ function HomeBaseRaccoon({
       style={[
         styles.sceneRaccoon,
         {
-          left,
-          right,
-          top,
+          ...home,
           transform: [{ translateX }, { translateY }],
         },
       ]}>
@@ -446,7 +454,6 @@ function getRecruitCount(raccoons: Record<string, { unlocked: boolean }>) {
 
 const styles = StyleSheet.create({
   sceneLayer: {
-    bottom: 170,
     left: 0,
     position: 'absolute',
     right: 0,
@@ -478,6 +485,7 @@ const styles = StyleSheet.create({
   sceneBuilding: {
     alignItems: 'center',
     position: 'absolute',
+    zIndex: 1,
   },
   sceneTag: {
     backgroundColor: '#F8E4B8',
@@ -494,6 +502,7 @@ const styles = StyleSheet.create({
   },
   sceneRaccoon: {
     position: 'absolute',
+    zIndex: 2,
   },
   raccoonButton: {
     alignItems: 'center',
@@ -568,7 +577,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
+  tutorialBanner: {
+    color: '#FFE8BF',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 16,
+    marginTop: 6,
+  },
+  tutorialRing: {
+    borderColor: '#E8B547',
+    borderRadius: 10,
+    borderWidth: 2,
+    padding: 2,
+  },
+  tutorialRingPadding: {
+    borderColor: '#E8B547',
+    borderRadius: 10,
+    borderWidth: 2,
+    padding: 8,
+  },
+  actionPrimaryWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  actionSecondaryWrap: {
+    flexShrink: 0,
+  },
   actionRow: {
+    alignItems: 'stretch',
     flexDirection: 'row',
     gap: 8,
   },

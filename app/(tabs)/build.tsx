@@ -1,12 +1,34 @@
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { BuildingArt } from '@/components/game/art';
 import { ActionButton, Card, CostRow, GameScreen, gameColors, ProgressBar } from '@/components/game/ui';
 import { BUILDINGS, BuildingId, getBuildingStage, getBuildingUpgradeCost, hasResources } from '@/constants/game';
+import { useMusicTrack } from '@/hooks/use-audio-events';
 import { useGame } from '@/state/game-store';
 
 export default function BuildScreen() {
+  const params = useLocalSearchParams<{ focus?: string }>();
   const { state, upgradeBuilding } = useGame();
+  useMusicTrack('home');
+  const highlightId =
+    typeof params.focus === 'string' && params.focus in BUILDINGS ? (params.focus as BuildingId) : undefined;
+  const [focusPulse, setFocusPulse] = useState(false);
+
+  useEffect(() => {
+    if (!highlightId) {
+      setFocusPulse(false);
+
+      return;
+    }
+
+    setFocusPulse(true);
+    const timeout = setTimeout(() => setFocusPulse(false), 2600);
+
+    return () => clearTimeout(timeout);
+  }, [highlightId]);
+
 
   return (
     <GameScreen title="Build & Upgrade" subtitle="Upgrade structures to increase crew capacity, storage, and run output.">
@@ -19,7 +41,9 @@ export default function BuildScreen() {
         const progress = level / building.maxLevel;
 
         return (
-          <Card key={buildingId} style={styles.buildingCard}>
+          <Card
+            key={buildingId}
+            style={[styles.buildingCard, highlightId === buildingId && focusPulse && styles.highlightCard]}>
             <View style={styles.buildingRow}>
               <View style={styles.artFrame}>
                 <BuildingArt buildingId={buildingId} level={level} size={106} />
@@ -65,6 +89,14 @@ export default function BuildScreen() {
 const styles = StyleSheet.create({
   buildingCard: {
     padding: 10,
+  },
+  highlightCard: {
+    borderColor: '#E8B547',
+    borderWidth: 2,
+    shadowColor: '#E8B547',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 6,
   },
   buildingRow: {
     alignItems: 'stretch',

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AnimatedRaccoonArt, BaseThemePreview, LootArt, RaccoonArt } from '@/components/game/art';
@@ -31,6 +32,7 @@ import {
   RESOURCE_KEYS,
   ResourceCost,
 } from '@/constants/game';
+import { useMusicTrack } from '@/hooks/use-audio-events';
 import { useGame } from '@/state/game-store';
 
 type HubTab = 'quests' | 'collection';
@@ -47,7 +49,18 @@ export default function CollectionScreen() {
     claimMilestoneReward,
     equipRaccoonSkin,
     selectBaseTheme,
+    advanceTutorialCollection,
   } = useGame();
+
+  useMusicTrack('home');
+
+  useFocusEffect(
+    useCallback(() => {
+      advanceTutorialCollection();
+    }, [advanceTutorialCollection]),
+  );
+
+
   const raccoonIds = Object.keys(RACCOONS) as RaccoonId[];
   const lootIds = Object.keys(LOOT_ITEMS);
   const discoveredLootIds = Array.from(new Set(state.discoveredLoot)).filter((lootId) => lootId in LOOT_ITEMS);
@@ -177,6 +190,12 @@ export default function CollectionScreen() {
               </Text>
             </View>
             <ProgressBar value={collectionProgress} />
+            {collectionTab === 'loot' ? (
+              <Text style={styles.collectionTeaser}>
+                {lootIds.length - discoveredLootIds.length} catalog discoveries left — shinier loot tends to lurk toward
+                the Convenience Store.
+              </Text>
+            ) : null}
             <View style={styles.segmented}>
               <SegmentButton
                 active={collectionTab === 'raccoons'}
@@ -494,6 +513,15 @@ function SegmentButton({ active, label, onPress }: { active: boolean; label: str
 }
 
 const styles = StyleSheet.create({
+  collectionTeaser: {
+    color: gameColors.greenDark,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 15,
+    marginVertical: 4,
+  },
+
   tabsCard: {
     padding: 8,
   },

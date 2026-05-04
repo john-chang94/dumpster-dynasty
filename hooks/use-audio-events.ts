@@ -1,33 +1,29 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 
-import { AudioEventId } from '@/constants/game';
+import { triggerGameSfx } from '@/audio/trigger-game-sfx';
+import { useMusicTrack } from '@/components/game/music-session';
+import { GAME_SFX_MODULES, type MusicTrackId } from '@/constants/audio-sources';
+import type { AudioEventId } from '@/constants/game';
 import { useGame } from '@/state/game-store';
 
-export type MusicTrackId = 'base' | 'scavenge' | 'reward';
+export type { MusicTrackId };
+export { useMusicTrack };
 
 export function useAudioEvent() {
-  const { state } = useGame();
+  const {
+    state: {
+      audioSettings: { sfxEnabled, sfxVolume },
+    },
+  } = useGame();
 
   return useCallback(
     (eventId: AudioEventId) => {
-      if (!state.audioSettings.sfxEnabled || state.audioSettings.sfxVolume <= 0) {
+      if (!sfxEnabled || sfxVolume <= 0) {
         return;
       }
 
-      void eventId;
+      triggerGameSfx(GAME_SFX_MODULES, eventId, sfxVolume);
     },
-    [state.audioSettings.sfxEnabled, state.audioSettings.sfxVolume],
+    [sfxEnabled, sfxVolume],
   );
-}
-
-export function useMusicTrack(trackId: MusicTrackId) {
-  const { state } = useGame();
-
-  useEffect(() => {
-    if (!state.audioSettings.musicEnabled || state.audioSettings.musicVolume <= 0) {
-      return;
-    }
-
-    void trackId;
-  }, [state.audioSettings.musicEnabled, state.audioSettings.musicVolume, trackId]);
 }

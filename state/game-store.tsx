@@ -4,6 +4,8 @@ import { AppState } from 'react-native';
 
 import {
   ACTIVE_ENCOUNTER_CHOICES,
+  ACTIVE_ENCOUNTER_TEMPLATE_IDS,
+  ActiveEncounterTemplateId,
   AudioSettings,
   ActiveEncounterChoiceId,
   ActiveEncounterResult,
@@ -37,6 +39,7 @@ import {
   RESOURCE_KEYS,
   ResourceBundle,
   ResourceCost,
+  pickEncounterTemplateId,
   subtractResources,
   ZoneId,
   ZONES,
@@ -64,6 +67,7 @@ export type ScavengeRun = {
   raccoonId: RaccoonId;
   startedAt: number;
   durationSec: number;
+  encounterTemplateId: ActiveEncounterTemplateId;
   encounterResolved: boolean;
   resourceMultiplier: number;
   rareBonus: number;
@@ -88,6 +92,9 @@ export type GameState = {
   ownedRaccoonSkinIds: RaccoonSkinId[];
   equippedSkinByRaccoon: Record<RaccoonId, RaccoonSkinId>;
   audioSettings: AudioSettings;
+  tutorialPhase: number;
+  pendingRewardBurst: ResourceBundle | null;
+  lootCelebrationLootId: string | null;
   lastSeenAt: number;
   totalRunsClaimed: number;
   lastMessage?: string;
@@ -111,7 +118,10 @@ type GameAction =
   | { type: 'updateAudioSettings'; settings: Partial<AudioSettings>; now: number }
   | { type: 'dismissOfflineSummary'; now: number }
   | { type: 'resetLocalSave'; now: number }
-  | { type: 'clearMessage' };
+  | { type: 'clearMessage' }
+  | { type: 'clearLootCelebration' }
+  | { type: 'clearPendingRewardBurst' }
+  | { type: 'advanceTutorialCollection'; now: number };
 
 type GameContextValue = {
   state: GameState;
@@ -132,6 +142,9 @@ type GameContextValue = {
   dismissOfflineSummary: () => void;
   resetLocalSave: () => void;
   clearMessage: () => void;
+  clearLootCelebration: () => void;
+  clearPendingRewardBurst: () => void;
+  advanceTutorialCollection: () => void;
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -232,6 +245,10 @@ export function GameProvider({ children }: PropsWithChildren) {
         );
       },
       clearMessage: () => dispatch({ type: 'clearMessage' }),
+      clearLootCelebration: () => dispatch({ type: 'clearLootCelebration' }),
+      clearPendingRewardBurst: () => dispatch({ type: 'clearPendingRewardBurst' }),
+      advanceTutorialCollection: () =>
+        dispatch({ type: 'advanceTutorialCollection', now: Date.now() }),
     }),
     [loaded, state],
   );
@@ -291,6 +308,9 @@ export function createInitialState(now = Date.now()): GameState {
     ownedRaccoonSkinIds: DEFAULT_OWNED_RACCOON_SKIN_IDS,
     equippedSkinByRaccoon: DEFAULT_RACCOON_SKINS,
     audioSettings: DEFAULT_AUDIO_SETTINGS,
+    tutorialPhase: 0,
+    pendingRewardBurst: null,
+    lootCelebrationLootId: null,
     lastSeenAt: now,
     totalRunsClaimed: 0,
     lastMessage: 'Tap the loot pile, send Scout out, then upgrade the base.',
@@ -366,11 +386,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
+      const burst = mergePendingRewardBurst(state.pendingRewardBurst, state.pendingOfflineRewards);
+
       return incrementQuestProgress({
         ...state,
         resources: addResources(state.resources, state.pendingOfflineRewards),
         pendingOfflineRewards: createResourceBundle(),
         offlineSummary: undefined,
+        pendingRewardBurst: burst,
         lastSeenAt: action.now,
         lastMessage: 'Offline stash claimed.',
         lastMessageScope: 'base',
@@ -378,11 +401,14 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'tapLootPile': {
       const shinies = Math.random() < 0.05 ? 1 : 0;
       const reward = { food: 3, scrap: 3, shinies };
+      const burst = mergePendingRewardBurst(state.pendingRewardBurst, reward);
 
       return incrementQuestProgress({
         ...state,
         resources: addResources(state.resources, reward),
         discoveredLoot: maybeDiscoverLoot(state.discoveredLoot, ['pizza_crust', 'soda_can'], 0.35),
+        pendingRewardBurst: burst,
+        tutorialPhase: state.tutorialPhase === 0 ? 1 : state.tutorialPhase,
         lastSeenAt: action.now,
         lastMessage: shinies > 0 ? 'Quick sort found +3 food, +3 scrap, and 1 shiny.' : 'Quick sort added +3 food and +3 scrap.',
         lastMessageScope: 'base',
@@ -408,21 +434,25 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         return { ...state, lastMessage: `${zone.name} already has a run in progress.`, lastMessageScope: 'scavenge' };
       }
 
+      const runId = `${action.zoneId}-${action.raccoonId}-${action.now}`;
+
       return incrementQuestProgress({
         ...state,
         runs: [
           ...state.runs,
           {
-            id: `${action.zoneId}-${action.raccoonId}-${action.now}`,
+            id: runId,
             zoneId: action.zoneId,
             raccoonId: action.raccoonId,
             startedAt: action.now,
             durationSec: getAdjustedRunDuration(state, action.zoneId, action.raccoonId),
+            encounterTemplateId: pickEncounterTemplateId(runId),
             encounterResolved: false,
             resourceMultiplier: 0,
             rareBonus: 0,
           },
         ],
+        tutorialPhase: state.tutorialPhase === 1 ? 2 : state.tutorialPhase,
         lastSeenAt: action.now,
         lastMessage: `${raccoon.name} headed for ${zone.name}.`,
         lastMessageScope: 'scavenge',
@@ -440,10 +470,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       const reward = rollRunReward(state, run);
+      const discoversLoot = reward.lootId ? !state.discoveredLoot.includes(reward.lootId) : false;
       const discoveredLoot = reward.lootId
         ? addUnique(state.discoveredLoot, reward.lootId)
         : state.discoveredLoot;
       const lootName = reward.lootId ? LOOT_ITEMS[reward.lootId].name : null;
+      const burst = mergePendingRewardBurst(state.pendingRewardBurst, reward.resources);
 
       return incrementQuestProgress({
         ...state,
@@ -451,6 +483,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         runs: state.runs.filter((candidate) => candidate.id !== run.id),
         discoveredLoot,
         totalRunsClaimed: state.totalRunsClaimed + 1,
+        pendingRewardBurst: burst,
+        lootCelebrationLootId:
+          discoversLoot && reward.lootId ? reward.lootId : state.lootCelebrationLootId,
+        tutorialPhase: state.tutorialPhase === 2 ? 3 : state.tutorialPhase,
         lastSeenAt: action.now,
         lastMessage: lootName ? `Run claimed. New find: ${lootName}.` : 'Run claimed.',
         lastMessageScope: action.scope ?? 'scavenge',
@@ -476,6 +512,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ...state.buildings,
           [action.buildingId]: { level: level + 1 },
         },
+        tutorialPhase: state.tutorialPhase === 3 ? 4 : state.tutorialPhase,
         lastSeenAt: action.now,
         lastMessage: `${building.name} upgraded to Level ${level + 1}.`,
         lastMessageScope: 'build',
@@ -592,10 +629,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           : candidate,
       );
 
+      const burst = mergePendingRewardBurst(state.pendingRewardBurst, result.immediateReward);
+
       return incrementQuestProgress({
         ...state,
         resources: addResources(state.resources, result.immediateReward),
         runs: nextRuns,
+        pendingRewardBurst: burst,
         lastSeenAt: action.now,
         lastMessage: result.message,
         lastMessageScope: 'scavenge',
@@ -686,6 +726,20 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         lastMessage: undefined,
         lastMessageScope: undefined,
       };
+    case 'clearLootCelebration':
+      return {
+        ...state,
+        lootCelebrationLootId: null,
+      };
+    case 'clearPendingRewardBurst':
+      return {
+        ...state,
+        pendingRewardBurst: null,
+      };
+    case 'advanceTutorialCollection':
+      return state.tutorialPhase === 4
+        ? { ...state, tutorialPhase: 5, lastSeenAt: action.now }
+        : state;
     default:
       return state;
   }
@@ -759,11 +813,38 @@ function mergeSavedState(saved: Partial<GameState>, now: number): GameState {
     ownedRaccoonSkinIds,
     equippedSkinByRaccoon: normalizeEquippedSkins(saved.equippedSkinByRaccoon, ownedRaccoonSkinIds),
     audioSettings: normalizeAudioSettings(saved.audioSettings),
+    tutorialPhase: normalizeTutorialPhase(saved.tutorialPhase, saved.totalRunsClaimed),
+    pendingRewardBurst: null,
+    lootCelebrationLootId: null,
     lastSeenAt: typeof saved.lastSeenAt === 'number' ? saved.lastSeenAt : now,
     totalRunsClaimed: typeof saved.totalRunsClaimed === 'number' ? saved.totalRunsClaimed : 0,
     lastMessage: saved.lastMessage,
     lastMessageScope: normalizeMessageScope(saved.lastMessageScope),
   };
+}
+
+function normalizeTutorialPhase(phase: unknown, totalRunsClaimed: unknown): number {
+  if (typeof phase === 'number' && !Number.isNaN(phase)) {
+    return Math.max(0, Math.min(5, Math.floor(phase)));
+  }
+
+  const claimed = typeof totalRunsClaimed === 'number' ? totalRunsClaimed : 0;
+
+  return claimed > 0 ? 5 : 0;
+}
+
+function normalizeEncounterTemplateId(
+  candidate: unknown,
+  runId: string,
+): ActiveEncounterTemplateId {
+  if (
+    typeof candidate === 'string' &&
+    (ACTIVE_ENCOUNTER_TEMPLATE_IDS as string[]).includes(candidate)
+  ) {
+    return candidate as ActiveEncounterTemplateId;
+  }
+
+  return pickEncounterTemplateId(runId);
 }
 
 function normalizeMessageScope(scope: unknown): MessageScope | undefined {
@@ -855,6 +936,10 @@ function normalizeAudioSettings(savedSettings: unknown): AudioSettings {
       typeof settings.sfxVolume === 'number' && !Number.isNaN(settings.sfxVolume)
         ? clampNumber(settings.sfxVolume, 0, 1)
         : DEFAULT_AUDIO_SETTINGS.sfxVolume,
+    hapticsEnabled:
+      typeof settings.hapticsEnabled === 'boolean'
+        ? settings.hapticsEnabled
+        : DEFAULT_AUDIO_SETTINGS.hapticsEnabled,
   };
 }
 
@@ -886,6 +971,7 @@ function normalizeRuns(savedRuns: unknown): ScavengeRun[] {
       raccoonId: run.raccoonId,
       startedAt: run.startedAt,
       durationSec: Math.max(15, Math.floor(run.durationSec)),
+      encounterTemplateId: normalizeEncounterTemplateId(run.encounterTemplateId, run.id),
       encounterResolved: Boolean(run.encounterResolved),
       resourceMultiplier: normalizeBonus(run.resourceMultiplier),
       rareBonus: normalizeBonus(run.rareBonus),
@@ -1243,9 +1329,26 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function mergePendingRewardBurst(
+  current: ResourceBundle | null | undefined,
+  delta: ResourceCost,
+): ResourceBundle | null {
+  const deltaBundle = createResourceBundle(delta);
+
+  if (getResourceTotal(deltaBundle) <= 0) {
+    return current ?? null;
+  }
+
+  const merged = createResourceBundle(addResources(current ?? createResourceBundle(), deltaBundle));
+
+  return getResourceTotal(merged) > 0 ? merged : null;
+}
+
 const saveState = debounce((state: GameState) => {
   const savePayload: GameState = {
     ...state,
+    pendingRewardBurst: null,
+    lootCelebrationLootId: null,
     lastSeenAt: Date.now(),
   };
 

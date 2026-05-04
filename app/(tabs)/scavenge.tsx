@@ -1,9 +1,13 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useNavigation } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { environmentSources } from '@/components/game/asset-sources';
+import { MUSIC_CROSSFADE_MS } from '@/components/game/music-session';
+
 import { AnimatedRaccoonArt, RaccoonArt, ZoneThumbnail } from '@/components/game/art';
 import {
   ActionButton,
@@ -11,6 +15,7 @@ import {
   CostRow,
   GameScreen,
   gameColors,
+  IconButton,
   OverlayPanel,
   ProgressBar,
   ResourceAmount,
@@ -20,6 +25,7 @@ import {
 } from '@/components/game/ui';
 import {
   ACTIVE_ENCOUNTER_CHOICES,
+  ACTIVE_ENCOUNTER_TEMPLATES,
   ActiveEncounterChoiceId,
   formatDuration,
   hasResources,
@@ -31,7 +37,8 @@ import {
   ZoneId,
   ZONES,
 } from '@/constants/game';
-import { useMusicTrack } from '@/hooks/use-audio-events';
+import { useAudioEvent, useMusicTrack } from '@/hooks/use-audio-events';
+import { useGameHaptics } from '@/hooks/use-game-haptics';
 import {
   getAvailableRaccoons,
   getEncounterChoiceChance,
@@ -51,22 +58,133 @@ const DEFAULT_TAB_BAR_STYLE = {
   minHeight: 62,
   paddingBottom: 8,
   paddingTop: 6,
+  position: 'relative' as const,
+};
+
+/**
+ * Collapses the tab bar out of layout so the scene fills the screen; opacity-only
+ * keeps a tall placeholder (and parent overflow clips any painted bleed).
+ */
+const TAB_BAR_HIDDEN_STYLE = {
+  backgroundColor: 'transparent',
+  borderTopWidth: 0,
+  bottom: 0,
+  elevation: 0,
+  height: 0,
+  left: 0,
+  maxHeight: 0,
+  minHeight: 0,
+  opacity: 0,
+  overflow: 'hidden' as const,
+  paddingBottom: 0,
+  paddingTop: 0,
+  pointerEvents: 'none' as const,
+  position: 'absolute' as const,
+  right: 0,
 };
 
 export default function ScavengeScreen() {
   const now = useRunClock();
-  useMusicTrack('scavenge');
   const navigation = useNavigation();
   const { state, startRun, claimRun, unlockZone, resolveActiveEncounter } = useGame();
   const [view, setView] = useState<ScavengeView>('active');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const activeRun = state.runs.find((run) => run.id === selectedRunId) ?? state.runs[0];
   const availableRaccoons = getAvailableRaccoons(state);
+
+  useMusicTrack(Boolean(activeRun) && view === 'active' ? 'activeScavenge' : 'home');
   const hideTabBar = Boolean(activeRun && view === 'active');
+  const assignmentSurface = !(activeRun && view === 'active');
+  const mapStartRedirectRef = useRef(false);
+  const prevRunsRef = useRef(state.runs);
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const transitionBusyRef = useRef(false);
+
+  useEffect(() => {
+    if (!activeRun && view !== 'map') {
+      setView('map');
+    }
+  }, [activeRun, view]);
+
+  const transitionScavengeView = useCallback(
+    (nextView: ScavengeView, opts?: { atMidpoint?: () => void }) => {
+      const crossingActiveUi =
+        Boolean(activeRun) &&
+        view !== nextView &&
+        (view === 'active' || nextView === 'active');
+
+      if (!crossingActiveUi) {
+        opts?.atMidpoint?.();
+        setView(nextView);
+
+        return;
+      }
+
+      if (transitionBusyRef.current) {
+        return;
+      }
+
+      transitionBusyRef.current = true;
+
+      const half = MUSIC_CROSSFADE_MS / 2;
+
+      Animated.timing(overlayOpacity, {
+        duration: half,
+        easing: Easing.in(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (!finished) {
+          transitionBusyRef.current = false;
+
+          return;
+        }
+
+        opts?.atMidpoint?.();
+        setView(nextView);
+
+        Animated.timing(overlayOpacity, {
+          duration: half,
+          easing: Easing.out(Easing.cubic),
+          toValue: 0,
+          useNativeDriver: true,
+        }).start(() => {
+          transitionBusyRef.current = false;
+        });
+      });
+    },
+    [activeRun, overlayOpacity, view],
+  );
+
+  function startRunFromMap(zoneId: ZoneId, raccoonId: RaccoonId) {
+    mapStartRedirectRef.current = true;
+    startRun(zoneId, raccoonId);
+  }
+
+  useEffect(() => {
+    const prev = prevRunsRef.current;
+
+    if (mapStartRedirectRef.current && state.runs.length > prev.length) {
+      const newRun = state.runs.find((run) => !prev.some((candidate) => candidate.id === run.id));
+
+      if (newRun) {
+        if (assignmentSurface) {
+          transitionScavengeView('active', {
+            atMidpoint: () => setSelectedRunId(newRun.id),
+          });
+        } else {
+          setSelectedRunId(newRun.id);
+        }
+      }
+    }
+
+    mapStartRedirectRef.current = false;
+    prevRunsRef.current = state.runs;
+  }, [assignmentSurface, state.runs, transitionScavengeView]);
 
   useEffect(() => {
     navigation.setOptions({
-      tabBarStyle: hideTabBar ? { display: 'none' } : DEFAULT_TAB_BAR_STYLE,
+      tabBarStyle: hideTabBar ? TAB_BAR_HIDDEN_STYLE : DEFAULT_TAB_BAR_STYLE,
     });
 
     return () => {
@@ -74,68 +192,88 @@ export default function ScavengeScreen() {
     };
   }, [hideTabBar, navigation]);
 
-  if (activeRun && view === 'active') {
-    return (
+  function viewRun(runId: string) {
+    transitionScavengeView('active', {
+      atMidpoint: () => setSelectedRunId(runId),
+    });
+  }
+
+  const mainContent =
+    activeRun && view === 'active' ? (
       <SceneScreen
         background={environmentSources[activeRun.zoneId]}
         compactHud
-        title="Active Run"
-        subtitle={`${state.runs.length} ${state.runs.length === 1 ? 'run' : 'runs'} underway`}>
+        leftAccessory={
+          <IconButton
+            accessibilityLabel="Back to scavenging map"
+            icon="arrow-left"
+            onPress={() => transitionScavengeView('map')}
+          />
+        }
+        subtitle={`${state.runs.length} ${state.runs.length === 1 ? 'run' : 'runs'} underway`}
+        title="Active Run">
         <ActiveRunView
           activeRuns={state.runs}
           claimRun={claimRun}
           now={now}
-          onMap={() => setView('map')}
           onSelectRun={setSelectedRunId}
           resolveActiveEncounter={resolveActiveEncounter}
           run={activeRun}
         />
       </SceneScreen>
-    );
-  }
+    ) : (
+      <GameScreen title="Scavenge Map" subtitle="Pick a route, assign an available raccoon, then return for the haul.">
+        <Card style={styles.summaryCard}>
+          <SectionTitle
+            title="Assignment"
+            action={
+              activeRun ? (
+                <ActionButton
+                  icon="run-fast"
+                  tone="plain"
+                  onPress={() => viewRun(activeRun.id)}
+                  style={styles.smallButton}>
+                  Active Runs
+                </ActionButton>
+              ) : null
+            }
+          />
+          <View style={styles.summaryGrid}>
+            <StatLine icon="account-check" label="Available crew" value={`${availableRaccoons.length}`} />
+            <StatLine icon="timer-sand" label="Active runs" value={`${state.runs.length}`} />
+            <StatLine icon="map-marker" label="Zones open" value={`${state.unlockedZones.length} / 3`} />
+          </View>
+        </Card>
 
-  function viewRun(runId: string) {
-    setSelectedRunId(runId);
-    setView('active');
-  }
+        {(Object.keys(ZONES) as ZoneId[]).map((zoneId) => (
+          <ZoneCard
+            availableRaccoons={availableRaccoons}
+            claimRun={claimRun}
+            key={zoneId}
+            now={now}
+            resources={state.resources}
+            run={getRunForZone(state, zoneId)}
+            startRun={startRunFromMap}
+            discoveredLoot={state.discoveredLoot}
+            unlocked={state.unlockedZones.includes(zoneId)}
+            unlockZone={unlockZone}
+            viewRun={viewRun}
+            zoneId={zoneId}
+          />
+        ))}
+      </GameScreen>
+    );
 
   return (
-    <GameScreen title="Scavenge Map" subtitle="Pick a route, assign an available raccoon, then return for the haul.">
-      <Card style={styles.summaryCard}>
-        <SectionTitle
-          title="Assignment"
-          action={
-            activeRun ? (
-              <ActionButton icon="run-fast" tone="plain" onPress={() => viewRun(activeRun.id)} style={styles.smallButton}>
-                Active Runs
-              </ActionButton>
-            ) : null
-          }
-        />
-        <View style={styles.summaryGrid}>
-          <StatLine icon="account-check" label="Available crew" value={`${availableRaccoons.length}`} />
-          <StatLine icon="timer-sand" label="Active runs" value={`${state.runs.length}`} />
-          <StatLine icon="map-marker" label="Zones open" value={`${state.unlockedZones.length} / 3`} />
-        </View>
-      </Card>
-
-      {(Object.keys(ZONES) as ZoneId[]).map((zoneId) => (
-        <ZoneCard
-          availableRaccoons={availableRaccoons}
-          claimRun={claimRun}
-          key={zoneId}
-          now={now}
-          resources={state.resources}
-          run={getRunForZone(state, zoneId)}
-          startRun={startRun}
-          discoveredLoot={state.discoveredLoot}
-          unlocked={state.unlockedZones.includes(zoneId)}
-          unlockZone={unlockZone}
-          viewRun={viewRun}
-          zoneId={zoneId}
-        />
-      ))}
-    </GameScreen>
+    <View style={styles.scavengeShell}>
+      {mainContent}
+      <Animated.View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={[styles.scavengeFadeOverlay, { opacity: overlayOpacity }]}
+      />
+    </View>
   );
 }
 
@@ -175,7 +313,7 @@ function ZoneCard({
       <View style={[styles.zoneAccent, { backgroundColor: zone.palette.accent }]} />
       <View style={styles.zoneTop}>
         <View style={[styles.zoneImageFrame, { backgroundColor: zone.palette.shadow }]}>
-          <ZoneThumbnail height={86} width={104} zoneId={zoneId} />
+          <ZoneThumbnail fill width={104} zoneId={zoneId} />
         </View>
         <View style={styles.zoneCopy}>
           <View style={styles.zoneTitleRow}>
@@ -287,7 +425,6 @@ function ActiveRunView({
   now,
   claimRun,
   resolveActiveEncounter,
-  onMap,
   onSelectRun,
 }: {
   run: ScavengeRun;
@@ -295,13 +432,43 @@ function ActiveRunView({
   now: number;
   claimRun: (runId: string) => void;
   resolveActiveEncounter: (runId: string, choiceId: ActiveEncounterChoiceId) => void;
-  onMap: () => void;
   onSelectRun: (runId: string) => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const tabBarInset = useBottomTabBarHeight();
+  const hudBottom = 10 + insets.bottom + tabBarInset;
+  const raccoonBottom = 270 + tabBarInset;
   const remainingSeconds = getRunRemainingSeconds(run, now);
   const ready = isRunReady(run, now);
   const zone = ZONES[run.zoneId];
   const raccoon = RACCOONS[run.raccoonId];
+  const playUi = useAudioEvent();
+  const { successNotify, warnNotify } = useGameHaptics();
+  const outcomeSigRef = useRef('');
+
+  useEffect(() => {
+    const result = run.encounterResult;
+
+    if (!run.encounterResolved || !result) {
+      return;
+    }
+
+    const sig = `${run.id}:${result.resolvedAt}:${result.success ? '1' : '0'}`;
+
+    if (outcomeSigRef.current === sig) {
+      return;
+    }
+
+    outcomeSigRef.current = sig;
+
+    if (result.success) {
+      playUi('active_success');
+      void successNotify();
+    } else {
+      playUi('active_fail');
+      void warnNotify();
+    }
+  }, [run.encounterResolved, run.encounterResult, run.id, playUi, successNotify, warnNotify]);
 
   return (
     <View style={styles.activeContent}>
@@ -313,11 +480,21 @@ function ActiveRunView({
         </View>
       </View>
 
-      <View style={styles.activeRaccoon}>
-        <AnimatedRaccoonArt animation={run.encounterResolved ? 'celebrate' : 'walk'} raccoonId={run.raccoonId} size={130} />
+      <View style={[styles.activeRaccoon, { bottom: raccoonBottom }]}>
+        <AnimatedRaccoonArt
+          animation={
+            run.encounterResolved
+              ? run.encounterResult?.success === false
+                ? 'fail'
+                : 'celebrate'
+              : 'walk'
+          }
+          raccoonId={run.raccoonId}
+          size={130}
+        />
       </View>
 
-      <View style={styles.bottomStack}>
+      <View style={[styles.bottomStack, { bottom: hudBottom }]}>
         <OverlayPanel style={styles.activePanel}>
           {activeRuns.length > 1 ? (
             <View style={styles.runSwitcher}>
@@ -369,9 +546,6 @@ function ActiveRunView({
               <ActionButton disabled={!ready} icon="package-variant" onPress={() => claimRun(run.id)} style={styles.primaryAction}>
                 {ready ? 'Claim' : 'Scavenging'}
               </ActionButton>
-              <ActionButton icon="map" tone="plain" onPress={onMap} style={styles.secondaryAction}>
-                Map
-              </ActionButton>
             </View>
           </View>
         </OverlayPanel>
@@ -389,28 +563,75 @@ function EncounterCard({
 }) {
   const zone = ZONES[run.zoneId];
   const raccoon = RACCOONS[run.raccoonId];
+  const tpl = ACTIVE_ENCOUNTER_TEMPLATES[run.encounterTemplateId];
+  const playUi = useAudioEvent();
+  const { mediumImpact } = useGameHaptics();
+  const busyRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [rollingChoice, setRollingChoice] = useState<ActiveEncounterChoiceId | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!run.encounterResolved) {
+      setRollingChoice(null);
+      busyRef.current = false;
+    }
+  }, [run.encounterResolved, run.id]);
+
+  function handlePick(choiceId: ActiveEncounterChoiceId) {
+    if (busyRef.current || run.encounterResolved || rollingChoice) {
+      return;
+    }
+
+    busyRef.current = true;
+    setRollingChoice(choiceId);
+    playUi('button_tap');
+    void mediumImpact();
+    timerRef.current = setTimeout(() => {
+      onResolve(run.id, choiceId);
+      busyRef.current = false;
+    }, 840);
+  }
+
+  const choicesLocked = rollingChoice !== null || run.encounterResolved;
 
   return (
     <View style={styles.encounterCard}>
       <View style={styles.encounterCopy}>
-        <Text style={styles.panelKicker}>Choice Encounter</Text>
-        <Text style={styles.encounterTitle}>Security Light</Text>
+        <Text style={styles.panelKicker}>Night run</Text>
+        <Text style={styles.encounterTitle}>{tpl.title}</Text>
         <Text style={styles.encounterBody}>
-          {raccoon.name} spotted movement near {zone.name}. Pick a response.
+          {tpl.describe({ raccoonName: raccoon.name, zoneName: zone.name })}
         </Text>
+        {choicesLocked && !run.encounterResolved ? (
+          <View style={styles.encounterRoll}>
+            <ActivityIndicator color={gameColors.orange} size="small" />
+            <Text style={styles.encounterRollText}>Working the angle...</Text>
+          </View>
+        ) : null}
       </View>
       <View style={styles.choiceRow}>
         {(Object.keys(ACTIVE_ENCOUNTER_CHOICES) as ActiveEncounterChoiceId[]).map((choiceId) => {
           const choice = ACTIVE_ENCOUNTER_CHOICES[choiceId];
           const chance = Math.round(getEncounterChoiceChance(choiceId, run.raccoonId) * 100);
+          const isPicked = rollingChoice === choiceId;
 
           return (
             <EncounterChoiceButton
               choiceId={choiceId}
               chance={chance}
+              disabled={choicesLocked && !isPicked}
               key={choiceId}
               label={choice.label}
-              onPress={() => onResolve(run.id, choiceId)}
+              onPress={() => handlePick(choiceId)}
+              pressed={Boolean(isPicked && !run.encounterResolved)}
             />
           );
         })}
@@ -422,12 +643,16 @@ function EncounterCard({
 function EncounterChoiceButton({
   choiceId,
   chance,
+  disabled,
   label,
+  pressed,
   onPress,
 }: {
   choiceId: ActiveEncounterChoiceId;
   chance: number;
+  disabled?: boolean;
   label: string;
+  pressed?: boolean;
   onPress: () => void;
 }) {
   const activeStyle =
@@ -438,8 +663,14 @@ function EncounterChoiceButton({
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.choiceButton, activeStyle, pressed && styles.choiceButtonPressed]}>
+      style={({ pressed: isPressed }) => [
+        styles.choiceButton,
+        activeStyle,
+        (isPressed || pressed) && styles.choiceButtonPressed,
+        disabled && styles.choiceButtonDisabled,
+      ]}>
       <MaterialCommunityIcons name={getChoiceIcon(choiceId)} size={17} color={iconColor} />
       <View style={styles.choiceButtonCopy}>
         <Text adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} style={[styles.choiceButtonLabel, activeTextStyle]}>
@@ -540,6 +771,14 @@ function InlineStat({
 }
 
 const styles = StyleSheet.create({
+  scavengeShell: {
+    flex: 1,
+  },
+  scavengeFadeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    zIndex: 10000,
+  },
   summaryCard: {
     gap: 10,
   },
@@ -568,8 +807,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   zoneImageFrame: {
+    alignSelf: 'stretch',
     borderRadius: 8,
+    flexDirection: 'column',
     padding: 3,
+    width: 110,
   },
   zoneCopy: {
     flex: 1,
@@ -725,13 +967,11 @@ const styles = StyleSheet.create({
   },
   activeRaccoon: {
     alignItems: 'center',
-    bottom: 270,
     left: 0,
     position: 'absolute',
     right: 0,
   },
   bottomStack: {
-    bottom: 10,
     gap: 8,
     left: 0,
     position: 'absolute',
@@ -762,6 +1002,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     lineHeight: 13,
+  },
+  encounterRoll: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  encounterRollText: {
+    color: gameColors.greenDark,
+    fontSize: 10,
+    fontWeight: '900',
   },
   choiceRow: {
     flexDirection: 'row',
@@ -794,6 +1045,9 @@ const styles = StyleSheet.create({
   choiceButtonPressed: {
     opacity: 0.78,
     transform: [{ translateY: 1 }],
+  },
+  choiceButtonDisabled: {
+    opacity: 0.42,
   },
   choiceButtonCopy: {
     alignItems: 'flex-start',
@@ -938,11 +1192,6 @@ const styles = StyleSheet.create({
   primaryAction: {
     flex: 1,
     minHeight: 36,
-    paddingVertical: 7,
-  },
-  secondaryAction: {
-    minHeight: 36,
-    minWidth: 88,
     paddingVertical: 7,
   },
 });

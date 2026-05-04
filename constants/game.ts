@@ -42,6 +42,7 @@ export type AudioSettings = {
   sfxEnabled: boolean;
   musicVolume: number;
   sfxVolume: number;
+  hapticsEnabled: boolean;
 };
 
 export type BaseThemeDefinition = {
@@ -107,6 +108,7 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   sfxEnabled: true,
   musicVolume: 0.7,
   sfxVolume: 0.85,
+  hapticsEnabled: true,
 };
 
 export const AUDIO_EVENT_IDS: AudioEventId[] = [
@@ -343,6 +345,78 @@ export const MILESTONE_REWARDS: Record<MilestoneId, MilestoneDefinition> = {
 };
 
 export const MILESTONE_IDS: MilestoneId[] = ['runs_3', 'runs_8', 'runs_15', 'runs_30'];
+
+export type ActiveEncounterTemplateId =
+  | 'security_light'
+  | 'barking_dog'
+  | 'suspicious_trash_bag'
+  | 'vending_machine'
+  | 'rival_raccoon'
+  | 'locked_dumpster';
+
+export type ActiveEncounterTemplate = {
+  id: ActiveEncounterTemplateId;
+  title: string;
+  describe: (ctx: { raccoonName: string; zoneName: string }) => string;
+};
+
+export const ACTIVE_ENCOUNTER_TEMPLATE_IDS: ActiveEncounterTemplateId[] = [
+  'security_light',
+  'barking_dog',
+  'suspicious_trash_bag',
+  'vending_machine',
+  'rival_raccoon',
+  'locked_dumpster',
+];
+
+export const ACTIVE_ENCOUNTER_TEMPLATES: Record<ActiveEncounterTemplateId, ActiveEncounterTemplate> = {
+  security_light: {
+    id: 'security_light',
+    title: 'Security light',
+    describe: ({ raccoonName, zoneName }) =>
+      `${raccoonName} spots a sweep of light near ${zoneName}. Stay low, move fast, or grab now?`,
+  },
+  barking_dog: {
+    id: 'barking_dog',
+    title: 'Barking dog',
+    describe: ({ raccoonName, zoneName }) =>
+      `A dog loses its mind two fences over while ${raccoonName} is mid-route at ${zoneName}.`,
+  },
+  suspicious_trash_bag: {
+    id: 'suspicious_trash_bag',
+    title: 'Suspicious trash bag',
+    describe: ({ raccoonName, zoneName }) =>
+      `Something inside a rustling bag at ${zoneName} might be treasure—or trouble—for ${raccoonName}.`,
+  },
+  vending_machine: {
+    id: 'vending_machine',
+    title: 'Vending machine',
+    describe: ({ raccoonName, zoneName }) =>
+      `A humming machine at ${zoneName} taunts ${raccoonName} with loose change and loud clanks.`,
+  },
+  rival_raccoon: {
+    id: 'rival_raccoon',
+    title: 'Rival raccoon',
+    describe: ({ raccoonName, zoneName }) =>
+      `Another bandit shows up at ${zoneName}, sizing up ${raccoonName}'s haul.`,
+  },
+  locked_dumpster: {
+    id: 'locked_dumpster',
+    title: 'Locked dumpster',
+    describe: ({ raccoonName, zoneName }) =>
+      `The best bin at ${zoneName} is latched tight. ${raccoonName} needs a plan.`,
+  },
+};
+
+export function pickEncounterTemplateId(runId: string): ActiveEncounterTemplateId {
+  let hash = 0;
+
+  for (let i = 0; i < runId.length; i += 1) {
+    hash = (hash * 31 + runId.charCodeAt(i)) >>> 0;
+  }
+
+  return ACTIVE_ENCOUNTER_TEMPLATE_IDS[hash % ACTIVE_ENCOUNTER_TEMPLATE_IDS.length];
+}
 
 export const ACTIVE_ENCOUNTER_CHOICES: Record<ActiveEncounterChoiceId, ActiveEncounterChoice> = {
   hide: {

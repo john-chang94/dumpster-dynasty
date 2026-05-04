@@ -23,7 +23,10 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
+        animation: 'none',
         headerShown: false,
+        lazy: false,
+        sceneStyle: { backgroundColor: gameColors.ink },
         tabBarActiveTintColor: gameColors.orange,
         tabBarInactiveTintColor: '#8C765C',
         tabBarButton: HapticTab,
@@ -37,6 +40,7 @@ export default function TabLayout() {
           minHeight: 62,
           paddingBottom: 8,
           paddingTop: 6,
+          position: 'relative',
         },
       }}>
       <Tabs.Screen

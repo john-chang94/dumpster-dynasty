@@ -36,7 +36,8 @@
             "backgroundColor": "#2D2118"
           }
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
